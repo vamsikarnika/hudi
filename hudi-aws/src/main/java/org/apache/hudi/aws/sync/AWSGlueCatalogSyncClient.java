@@ -614,6 +614,23 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
   }
 
   @Override
+  public List<FieldSchema> getMetastoreFieldSchemas(String tableName) {
+    try {
+      Table table = getTable(awsGlue, databaseName, tableName);
+      List<FieldSchema> partitionFields =
+          table.partitionKeys().stream().map(column -> new FieldSchema(column.name(), column.type(), column.comment())).collect(Collectors.toList());
+
+      List<FieldSchema> columnsFields =
+          table.storageDescriptor().columns().stream().map(column -> new FieldSchema(column.name(), column.type(), column.comment())).collect(Collectors.toList());
+
+      columnsFields.addAll(partitionFields);
+      return columnsFields;
+    } catch (Exception e) {
+      throw new HoodieGlueSyncException("Failed to get field schemas from metastore for table : " + tableName, e);
+    }
+  }
+
+  @Override
   public Option<String> getLastReplicatedTime(String tableName) {
     throw new UnsupportedOperationException("Not supported: `getLastReplicatedTime`");
   }
