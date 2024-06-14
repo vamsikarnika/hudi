@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -169,10 +170,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
             + config.getString(METASTORE_URIS) + ", basePath :"
             + config.getString(META_SYNC_BASE_PATH));
 
-        Timer.Context context = metrics.getMetaSyncTimer();
         doSync();
-        long durationInMs = context.stop();
-        metrics.updateMetaSyncMetrics(durationInMs);
       }
     } catch (RuntimeException re) {
       throw new HoodieException("Got runtime exception when hive syncing " + tableName, re);
@@ -326,12 +324,18 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
 
   private void recreateAndSyncHiveTable(String tableName, boolean useRealtimeInputFormat, boolean readAsOptimized) {
     LOG.info("recreating and syncing the table {}", tableName);
+    Timer.Context timerContext = metrics.getRecreateAndSyncTimer();
     MessageType schema = syncClient.getStorageSchema(!config.getBoolean(HIVE_SYNC_OMIT_METADATA_FIELDS));
     try {
       createOrReplaceTable(tableName, useRealtimeInputFormat, readAsOptimized, schema);
       syncAllPartitions(tableName);
       syncClient.updateLastCommitTimeSynced(tableName);
+      if (Objects.nonNull(timerContext)) {
+        long durationInMs = metrics.getDurationInMs(timerContext.stop());
+        metrics.updateRecreateAndSyncMetrics(durationInMs);
+      }
     } catch (HoodieHiveSyncException ex) {
+      metrics.emitRecreateAndSyncFailureMetric();
       throw new HoodieHiveSyncException("failed to recreate the table for " + tableName, ex);
     }
   }

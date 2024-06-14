@@ -38,14 +38,10 @@ public class HoodieSyncMetrics {
 
   private final String syncToolName;
 
-  public String metaSyncTimerName;
   public String recreateAndSyncTimerName;
-  public String metaSyncFailureCounterName;
   public String recreateAndSyncFailureCounterName;
 
-  public Timer metaSyncTimer;
   public Timer recreateAndSyncTimer;
-  public Counter metaSyncFailureCounter;
   public Counter recreateAndSyncFailureCounter;
 
   public HoodieSyncMetrics(HoodieSyncConfig config, String syncToolName) {
@@ -54,18 +50,9 @@ public class HoodieSyncMetrics {
     metrics = Metrics.getInstance(metricsConfig);
     this.syncToolName = syncToolName;
     if (metricsConfig.isMetricsOn()) {
-      this.metaSyncTimerName = getMetricsName("timer", "meta_sync");
       this.recreateAndSyncTimerName = getMetricsName("timer", "recreate_and_sync");
-      this.metaSyncFailureCounterName = getMetricsName("counter", "meta_sync.failure");
       this.recreateAndSyncFailureCounterName = getMetricsName("counter", "recreate_and_sync.failure");
     }
-  }
-
-  public Timer.Context getMetaSyncTimer() {
-    if (metricsConfig.isMetricsOn() && metaSyncTimer == null) {
-      metaSyncTimer = createTimer(metaSyncTimerName);
-    }
-    return metaSyncTimer == null ? null : metaSyncTimer.time();
   }
 
   public Timer.Context getRecreateAndSyncTimer() {
@@ -79,27 +66,29 @@ public class HoodieSyncMetrics {
     return metricsConfig.isMetricsOn() ? metrics.getRegistry().timer(name) : null;
   }
 
-  public void emitMetaSyncFailureMetric() {
-    metaSyncFailureCounter = getCounter(metaSyncFailureCounter, metaSyncTimerName);
-    metaSyncFailureCounter.inc();
-  }
-
   public void emitRecreateAndSyncFailureMetric() {
     recreateAndSyncFailureCounter = getCounter(recreateAndSyncFailureCounter, recreateAndSyncFailureCounterName);
     recreateAndSyncFailureCounter.inc();
   }
 
-  public void updateMetaSyncMetrics(long durationInMs) {
+  public void updateRecreateAndSyncMetrics(long durationInMs) {
     if (metricsConfig.isMetricsOn()) {
       LOG.info(
-          String.format("Sending meta sync metrics (duration=%d)", durationInMs));
-      metrics.registerGauge(getMetricsName("meta_sync", "duration"), durationInMs);
+          String.format("Sending recreate and sync metrics (duration=%d)", durationInMs));
+      metrics.registerGauge(getMetricsName("recreate_and_sync", "duration"), durationInMs);
     }
+  }
+
+  /**
+   * By default, the timer context returns duration with nano seconds. Convert it to millisecond.
+   */
+  public long getDurationInMs(long ctxDuration) {
+    return ctxDuration / 1000000;
   }
 
   @VisibleForTesting
   public String getMetricsName(String action, String metric) {
-    if (config == null) {
+    if (metricsConfig == null) {
       return null;
     }
     if (StringUtils.isNullOrEmpty(metricsConfig.getMetricReporterMetricsNamePrefix())) {
