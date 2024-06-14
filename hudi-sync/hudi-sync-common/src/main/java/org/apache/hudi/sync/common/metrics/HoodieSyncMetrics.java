@@ -36,7 +36,7 @@ public class HoodieSyncMetrics {
   private HoodieSyncConfig config;
   private HoodieMetricsConfig metricsConfig;
 
-  private final String metastoreName;
+  private final String syncToolName;
 
   public String metaSyncTimerName;
   public String recreateAndSyncTimerName;
@@ -48,11 +48,11 @@ public class HoodieSyncMetrics {
   public Counter metaSyncFailureCounter;
   public Counter recreateAndSyncFailureCounter;
 
-  public HoodieSyncMetrics(HoodieSyncConfig config, String metastoreName) {
+  public HoodieSyncMetrics(HoodieSyncConfig config, String syncToolName) {
     this.config = config;
     this.metricsConfig = config.getMetricsConfig();
     metrics = Metrics.getInstance(metricsConfig);
-    this.metastoreName = metastoreName;
+    this.syncToolName = syncToolName;
     if (metricsConfig.isMetricsOn()) {
       this.metaSyncTimerName = getMetricsName("timer", "meta_sync");
       this.recreateAndSyncTimerName = getMetricsName("timer", "recreate_and_sync");
@@ -103,9 +103,9 @@ public class HoodieSyncMetrics {
       return null;
     }
     if (StringUtils.isNullOrEmpty(metricsConfig.getMetricReporterMetricsNamePrefix())) {
-      return String.format("%s.%s.%s", metastoreName, action, metric);
+      return String.format("%s.%s.%s", action, metric, syncToolName);
     } else {
-      return String.format("%s.%s.%s.%s", metastoreName, metricsConfig.getMetricReporterMetricsNamePrefix(), action, metric);
+      return String.format("%s.%s.%s.%s", metricsConfig.getMetricReporterMetricsNamePrefix(), action, metric, syncToolName);
     }
   }
 

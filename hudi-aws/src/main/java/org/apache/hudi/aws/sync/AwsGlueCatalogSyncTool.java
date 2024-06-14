@@ -22,7 +22,6 @@ import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.hive.HiveSyncConfig;
 import org.apache.hudi.hive.HiveSyncTool;
-import org.apache.hudi.sync.common.metrics.HoodieSyncMetrics;
 
 import com.beust.jcommander.JCommander;
 import org.apache.hadoop.conf.Configuration;
@@ -57,11 +56,6 @@ public class AwsGlueCatalogSyncTool extends HiveSyncTool {
   @Override
   protected boolean shouldRecreateAndSyncTable() {
     return config.getBooleanOrDefault(RECREATE_GLUE_TABLE_ON_ERROR);
-  }
-
-  @Override
-  protected void initMetrics() {
-    metrics = new HoodieSyncMetrics(config, "glue");
   }
 
   public static void main(String[] args) {

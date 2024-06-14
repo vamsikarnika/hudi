@@ -121,7 +121,6 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     this.config = new HiveSyncConfig(props, hadoopConfForSync);
     this.databaseName = config.getStringOrDefault(META_SYNC_DATABASE_NAME);
     this.tableName = config.getStringOrDefault(META_SYNC_TABLE_NAME);
-    initMetrics();
     initSyncClient(config);
     initTableNameVars(config);
   }
@@ -136,10 +135,6 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
         throw new HoodieHiveSyncException("Got runtime exception when hive syncing", e);
       }
     }
-  }
-
-  protected void initMetrics() {
-    metrics = new HoodieSyncMetrics(config, "hive");
   }
 
   private void initTableNameVars(HiveSyncConfig config) {
