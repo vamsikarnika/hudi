@@ -27,6 +27,7 @@ import org.apache.hudi.exception.InvalidTableException;
 import org.apache.hudi.hive.util.PartitionFilterGenerator;
 import org.apache.hudi.sync.common.HoodieSyncClient;
 import org.apache.hudi.sync.common.HoodieSyncTool;
+import org.apache.hudi.sync.common.metrics.HoodieSyncMetrics;
 import org.apache.hudi.sync.common.model.FieldSchema;
 import org.apache.hudi.sync.common.model.Partition;
 import org.apache.hudi.sync.common.model.PartitionEvent;
@@ -34,6 +35,7 @@ import org.apache.hudi.sync.common.model.PartitionEvent.PartitionEventType;
 import org.apache.hudi.sync.common.util.SparkDataSourceTableUtils;
 
 import com.beust.jcommander.JCommander;
+import com.codahale.metrics.Timer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.parquet.schema.MessageType;
@@ -98,6 +100,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
   protected HoodieSyncClient syncClient;
   protected String snapshotTableName;
   protected Option<String> roTableName;
+  protected HoodieSyncMetrics metrics;
 
   private String hiveSyncTableStrategy;
 
@@ -118,6 +121,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     this.config = new HiveSyncConfig(props, hadoopConfForSync);
     this.databaseName = config.getStringOrDefault(META_SYNC_DATABASE_NAME);
     this.tableName = config.getStringOrDefault(META_SYNC_TABLE_NAME);
+    initMetrics();
     initSyncClient(config);
     initTableNameVars(config);
   }
@@ -132,6 +136,10 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
         throw new HoodieHiveSyncException("Got runtime exception when hive syncing", e);
       }
     }
+  }
+
+  protected void initMetrics() {
+    metrics = new HoodieSyncMetrics(config, "hive");
   }
 
   private void initTableNameVars(HiveSyncConfig config) {
@@ -166,7 +174,10 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
             + config.getString(METASTORE_URIS) + ", basePath :"
             + config.getString(META_SYNC_BASE_PATH));
 
+        Timer.Context context = metrics.getMetaSyncTimer();
         doSync();
+        long durationInMs = context.stop();
+        metrics.updateMetaSyncMetrics(durationInMs);
       }
     } catch (RuntimeException re) {
       throw new HoodieException("Got runtime exception when hive syncing " + tableName, re);
