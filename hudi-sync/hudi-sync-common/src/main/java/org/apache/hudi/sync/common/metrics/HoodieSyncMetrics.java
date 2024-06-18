@@ -55,6 +55,10 @@ public class HoodieSyncMetrics {
     }
   }
 
+  public Metrics getMetrics() {
+    return metrics;
+  }
+
   public Timer.Context getRecreateAndSyncTimer() {
     if (metricsConfig.isMetricsOn() && recreateAndSyncTimer == null) {
       recreateAndSyncTimer = createTimer(recreateAndSyncTimerName);
