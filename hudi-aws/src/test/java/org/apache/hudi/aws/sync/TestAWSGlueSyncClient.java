@@ -19,6 +19,7 @@
 package org.apache.hudi.aws.sync;
 
 import org.apache.hudi.aws.testutils.GlueTestUtil;
+import org.apache.hudi.sync.common.model.FieldSchema;
 
 import org.apache.parquet.schema.MessageType;
 import org.junit.jupiter.api.AfterAll;
@@ -30,6 +31,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.glue.GlueAsyncClient;
+import software.amazon.awssdk.services.glue.model.Column;
 import software.amazon.awssdk.services.glue.model.CreateTableRequest;
 import software.amazon.awssdk.services.glue.model.CreateTableResponse;
 import software.amazon.awssdk.services.glue.model.DeleteTableRequest;
@@ -41,9 +43,12 @@ import software.amazon.awssdk.services.glue.model.Table;
 import software.amazon.awssdk.services.glue.model.UpdateTableRequest;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -144,5 +149,81 @@ class TestAWSGlueSyncClient {
     awsGlueSyncClient.dropTable("test");
     // verify if aws glue delete table method called once
     verify(mockAwsGlue, times(1)).deleteTable(any(DeleteTableRequest.class));
+  }
+
+  @Test
+  void testMetastoreFieldSchemas() {
+    String tableName = "testTable";
+    String databaseName = "testdb";
+    String inputFormatClass = "inputFormat";
+    String outputFormatClass = "outputFormat";
+    String serdeClass = "serde";
+    HashMap<String, String> serdeProperties = new HashMap<>();
+    HashMap<String, String> tableProperties = new HashMap<>();
+    List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
+        Column.builder().name("age").type("INT32").comment("person's age").build());
+    List<Column> partitionKeys = Arrays.asList(Column.builder().name("city").type("string").comment("person's city").build());
+    software.amazon.awssdk.services.glue.model.StorageDescriptor storageDescriptor = software.amazon.awssdk.services.glue.model.StorageDescriptor.builder()
+        .serdeInfo(SerDeInfo.builder().serializationLibrary(serdeClass).parameters(serdeProperties).build())
+        .inputFormat(inputFormatClass)
+        .columns(columns)
+        .outputFormat(outputFormatClass)
+        .build();
+    Table tempTable = Table.builder()
+        .name(tableName)
+        .tableType("COPY_ON_WRITE")
+        .parameters(new HashMap<>())
+        .storageDescriptor(storageDescriptor)
+        .partitionKeys(partitionKeys)
+        .parameters(tableProperties)
+        .databaseName(databaseName)
+        .build();
+    GetTableResponse response = GetTableResponse.builder()
+        .table(tempTable)
+        .build();
+
+    CompletableFuture<GetTableResponse> tableResponse = CompletableFuture.completedFuture(response);
+    // mock aws glue get table call
+    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
+
+    List<FieldSchema> fields = awsGlueSyncClient.getMetastoreFieldSchemas(tableName);
+    assertEquals(3, fields.size(), "Glue table schema contain 3 fields");
+  }
+
+  @Test
+  void testMetastoreFieldSchemas_EmptyPartitions() {
+    String tableName = "testTable";
+    String databaseName = "testdb";
+    String inputFormatClass = "inputFormat";
+    String outputFormatClass = "outputFormat";
+    String serdeClass = "serde";
+    HashMap<String, String> serdeProperties = new HashMap<>();
+    HashMap<String, String> tableProperties = new HashMap<>();
+    List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
+        Column.builder().name("age").type("INT32").comment("person's age").build());
+    software.amazon.awssdk.services.glue.model.StorageDescriptor storageDescriptor = software.amazon.awssdk.services.glue.model.StorageDescriptor.builder()
+        .serdeInfo(SerDeInfo.builder().serializationLibrary(serdeClass).parameters(serdeProperties).build())
+        .inputFormat(inputFormatClass)
+        .columns(columns)
+        .outputFormat(outputFormatClass)
+        .build();
+    Table table = Table.builder()
+        .name(tableName)
+        .tableType("COPY_ON_WRITE")
+        .parameters(new HashMap<>())
+        .storageDescriptor(storageDescriptor)
+        .parameters(tableProperties)
+        .databaseName(databaseName)
+        .build();
+    GetTableResponse response = GetTableResponse.builder()
+        .table(table)
+        .build();
+
+    CompletableFuture<GetTableResponse> tableResponse = CompletableFuture.completedFuture(response);
+    // mock aws glue get table call
+    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
+
+    List<FieldSchema> fields = awsGlueSyncClient.getMetastoreFieldSchemas(tableName);
+    assertEquals(2, fields.size(), "Glue table schema contain 2 fields");
   }
 }
