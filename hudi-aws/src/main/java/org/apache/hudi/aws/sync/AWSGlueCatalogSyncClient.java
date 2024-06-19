@@ -617,17 +617,17 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
   public List<FieldSchema> getMetastoreFieldSchemas(String tableName) {
     try {
       Table table = getTable(awsGlue, databaseName, tableName);
-      List<FieldSchema> partitionFields =
-          table.partitionKeys().stream().map(column -> new FieldSchema(column.name(), column.type(), column.comment())).collect(Collectors.toList());
-
-      List<FieldSchema> columnsFields =
-          table.storageDescriptor().columns().stream().map(column -> new FieldSchema(column.name(), column.type(), column.comment())).collect(Collectors.toList());
-
+      List<FieldSchema> partitionFields = getFieldSchemas(table.partitionKeys());
+      List<FieldSchema> columnsFields = getFieldSchemas(table.storageDescriptor().columns());
       columnsFields.addAll(partitionFields);
       return columnsFields;
     } catch (Exception e) {
-      throw new HoodieGlueSyncException("Failed to get field schemas from metastore for table : " + tableName, e);
+      throw new HoodieGlueSyncException("Failed to get field schemas from metastore for table : " + tableId(databaseName, tableName), e);
     }
+  }
+
+  private List<FieldSchema> getFieldSchemas(List<Column> columns) {
+    return columns.stream().map(column -> new FieldSchema(column.name(), column.type(), column.comment())).collect(Collectors.toList());
   }
 
   @Override
