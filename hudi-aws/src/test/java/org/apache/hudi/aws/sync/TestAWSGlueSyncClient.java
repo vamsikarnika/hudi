@@ -161,7 +161,7 @@ class TestAWSGlueSyncClient {
     HashMap<String, String> serdeProperties = new HashMap<>();
     HashMap<String, String> tableProperties = new HashMap<>();
     List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
-        Column.builder().name("age").type("INT32").comment("person's age").build());
+        Column.builder().name("age").type("int").comment("person's age").build());
     List<Column> partitionKeys = Arrays.asList(Column.builder().name("city").type("string").comment("person's city").build());
     software.amazon.awssdk.services.glue.model.StorageDescriptor storageDescriptor = software.amazon.awssdk.services.glue.model.StorageDescriptor.builder()
         .serdeInfo(SerDeInfo.builder().serializationLibrary(serdeClass).parameters(serdeProperties).build())
@@ -188,6 +188,9 @@ class TestAWSGlueSyncClient {
 
     List<FieldSchema> fields = awsGlueSyncClient.getMetastoreFieldSchemas(tableName);
     assertEquals(3, fields.size(), "Glue table schema contain 3 fields");
+    assertEquals("name", fields.get(0).getName(), "glue table first column should be name");
+    assertEquals("int", fields.get(1).getType(), "glue table second column type should be int");
+    assertEquals("person's city", fields.get(2).getComment().get(), "glue table third column comment should be age");
   }
 
   @Test
@@ -200,7 +203,7 @@ class TestAWSGlueSyncClient {
     HashMap<String, String> serdeProperties = new HashMap<>();
     HashMap<String, String> tableProperties = new HashMap<>();
     List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
-        Column.builder().name("age").type("INT32").comment("person's age").build());
+        Column.builder().name("age").type("int").comment("person's age").build());
     software.amazon.awssdk.services.glue.model.StorageDescriptor storageDescriptor = software.amazon.awssdk.services.glue.model.StorageDescriptor.builder()
         .serdeInfo(SerDeInfo.builder().serializationLibrary(serdeClass).parameters(serdeProperties).build())
         .inputFormat(inputFormatClass)
@@ -225,5 +228,7 @@ class TestAWSGlueSyncClient {
 
     List<FieldSchema> fields = awsGlueSyncClient.getMetastoreFieldSchemas(tableName);
     assertEquals(2, fields.size(), "Glue table schema contain 2 fields");
+    assertEquals("name", fields.get(0).getName(), "glue table first column should be name");
+    assertEquals("int", fields.get(1).getType(), "glue table second column type should be int");
   }
 }
