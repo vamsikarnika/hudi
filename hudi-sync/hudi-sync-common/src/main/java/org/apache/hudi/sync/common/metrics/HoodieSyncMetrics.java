@@ -47,9 +47,9 @@ public class HoodieSyncMetrics {
   public HoodieSyncMetrics(HoodieSyncConfig config, String syncToolName) {
     this.config = config;
     this.metricsConfig = config.getMetricsConfig();
-    metrics = Metrics.getInstance(metricsConfig);
     this.syncToolName = syncToolName;
     if (metricsConfig.isMetricsOn()) {
+      metrics = Metrics.getInstance(metricsConfig);
       this.recreateAndSyncTimerName = getMetricsName("timer", "meta_sync.recreate_table");
       this.recreateAndSyncFailureCounterName = getMetricsName("counter", "meta_sync.recreate_table.failure");
     }
