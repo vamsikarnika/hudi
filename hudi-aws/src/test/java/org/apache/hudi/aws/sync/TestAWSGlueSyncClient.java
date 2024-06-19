@@ -36,6 +36,7 @@ import software.amazon.awssdk.services.glue.model.CreateTableRequest;
 import software.amazon.awssdk.services.glue.model.CreateTableResponse;
 import software.amazon.awssdk.services.glue.model.DeleteTableRequest;
 import software.amazon.awssdk.services.glue.model.DeleteTableResponse;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
 import software.amazon.awssdk.services.glue.model.GetTableRequest;
 import software.amazon.awssdk.services.glue.model.GetTableResponse;
 import software.amazon.awssdk.services.glue.model.SerDeInfo;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -230,5 +232,13 @@ class TestAWSGlueSyncClient {
     assertEquals(2, fields.size(), "Glue table schema contain 2 fields");
     assertEquals("name", fields.get(0).getName(), "glue table first column should be name");
     assertEquals("int", fields.get(1).getType(), "glue table second column type should be int");
+  }
+
+  @Test
+  void testMetastoreFieldSchemas_ExceptionThrows() {
+    String tableName = "testTable";
+    // mock aws glue get table call to throw an exception
+    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenThrow(EntityNotFoundException.class);
+    assertThrows(HoodieGlueSyncException.class,() -> awsGlueSyncClient.getMetastoreFieldSchemas(tableName));
   }
 }
