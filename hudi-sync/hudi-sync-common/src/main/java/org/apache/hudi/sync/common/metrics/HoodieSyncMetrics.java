@@ -50,8 +50,8 @@ public class HoodieSyncMetrics {
     metrics = Metrics.getInstance(metricsConfig);
     this.syncToolName = syncToolName;
     if (metricsConfig.isMetricsOn()) {
-      this.recreateAndSyncTimerName = getMetricsName("timer", "recreate_and_sync");
-      this.recreateAndSyncFailureCounterName = getMetricsName("counter", "recreate_and_sync.failure");
+      this.recreateAndSyncTimerName = getMetricsName("timer", "meta_sync.recreate_table");
+      this.recreateAndSyncFailureCounterName = getMetricsName("counter", "meta_sync.recreate_table.failure");
     }
   }
 
@@ -79,7 +79,7 @@ public class HoodieSyncMetrics {
     if (metricsConfig.isMetricsOn()) {
       LOG.info(
           String.format("Sending recreate and sync metrics (duration=%d)", durationInMs));
-      metrics.registerGauge(getMetricsName("recreate_and_sync", "duration"), durationInMs);
+      metrics.registerGauge(getMetricsName("meta_sync", "recreate_table.duration"), durationInMs);
     }
   }
 

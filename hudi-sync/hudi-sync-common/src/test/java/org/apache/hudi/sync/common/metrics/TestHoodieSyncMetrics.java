@@ -69,7 +69,7 @@ public class TestHoodieSyncMetrics {
     Thread.sleep(5);
     long durationInMs = hoodieSyncMetrics.getDurationInMs(timerCtx.stop());
     hoodieSyncMetrics.updateRecreateAndSyncMetrics(durationInMs);
-    String metricName = hoodieSyncMetrics.getMetricsName("recreate_and_sync", "duration");
+    String metricName = hoodieSyncMetrics.getMetricsName("meta_sync.recreate_table", "duration");
     long msec = (Long) metrics.getRegistry().getGauges().get(metricName).getValue();
     assertTrue(msec > 0);
   }
@@ -77,7 +77,7 @@ public class TestHoodieSyncMetrics {
   @Test
   void testEmitRecreateAndSyncFailureMetric() {
     hoodieSyncMetrics.emitRecreateAndSyncFailureMetric();
-    String metricsName = hoodieSyncMetrics.getMetricsName("counter", "recreate_and_sync.failure");
+    String metricsName = hoodieSyncMetrics.getMetricsName("counter", "meta_sync.recreate_table.failure");
     long count = metrics.getRegistry().getCounters().get(metricsName).getCount();
     assertTrue(count > 0);
   }
