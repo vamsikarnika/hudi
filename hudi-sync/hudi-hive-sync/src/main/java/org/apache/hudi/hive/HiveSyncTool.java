@@ -27,7 +27,6 @@ import org.apache.hudi.exception.InvalidTableException;
 import org.apache.hudi.hive.util.PartitionFilterGenerator;
 import org.apache.hudi.sync.common.HoodieSyncClient;
 import org.apache.hudi.sync.common.HoodieSyncTool;
-import org.apache.hudi.sync.common.metrics.HoodieSyncMetrics;
 import org.apache.hudi.sync.common.model.FieldSchema;
 import org.apache.hudi.sync.common.model.Partition;
 import org.apache.hudi.sync.common.model.PartitionEvent;
@@ -101,7 +100,6 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
   protected HoodieSyncClient syncClient;
   protected String snapshotTableName;
   protected Option<String> roTableName;
-  protected HoodieSyncMetrics metrics;
 
   private String hiveSyncTableStrategy;
 
