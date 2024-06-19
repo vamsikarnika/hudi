@@ -92,9 +92,6 @@ public class HoodieSyncMetrics {
 
   @VisibleForTesting
   public String getMetricsName(String action, String metric) {
-    if (metricsConfig == null) {
-      return null;
-    }
     if (StringUtils.isNullOrEmpty(metricsConfig.getMetricReporterMetricsNamePrefix())) {
       return String.format("%s.%s.%s", action, metric, syncToolName);
     } else {

@@ -33,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
@@ -70,8 +71,8 @@ public class TestHoodieSyncMetrics {
     long durationInMs = hoodieSyncMetrics.getDurationInMs(timerCtx.stop());
     hoodieSyncMetrics.updateRecreateAndSyncMetrics(durationInMs);
     String metricName = hoodieSyncMetrics.getMetricsName("meta_sync.recreate_table", "duration");
-    long msec = (Long) metrics.getRegistry().getGauges().get(metricName).getValue();
-    assertTrue(msec > 0);
+    long timeIsMs = (Long) metrics.getRegistry().getGauges().get(metricName).getValue();
+    assertTrue(timeIsMs > 0, "recreate_table duration metric value should be > 0");
   }
 
   @Test
@@ -79,6 +80,17 @@ public class TestHoodieSyncMetrics {
     hoodieSyncMetrics.emitRecreateAndSyncFailureMetric();
     String metricsName = hoodieSyncMetrics.getMetricsName("counter", "meta_sync.recreate_table.failure");
     long count = metrics.getRegistry().getCounters().get(metricsName).getCount();
-    assertTrue(count > 0);
+    assertEquals(1, count, "recreate_table failure counter value should be 1");
+  }
+
+  @Test
+  void testEmitRecreateAndSyncFailureMetric_WithoutMetricsNamePrefix() {
+    when(metricsConfig.getMetricReporterMetricsNamePrefix()).thenReturn("");
+    hoodieSyncMetrics = new HoodieSyncMetrics(syncConfig, "TestHiveSyncTool");
+    metrics = hoodieSyncMetrics.getMetrics();
+    hoodieSyncMetrics.emitRecreateAndSyncFailureMetric();
+    String metricsName = hoodieSyncMetrics.getMetricsName("counter", "meta_sync.recreate_table.failure");
+    long count = metrics.getRegistry().getCounters().get(metricsName).getCount();
+    assertEquals(1, count, "recreate_table failure counter value should be 1");
   }
 }
