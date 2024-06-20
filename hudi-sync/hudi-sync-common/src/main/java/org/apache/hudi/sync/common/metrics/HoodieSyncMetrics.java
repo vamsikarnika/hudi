@@ -38,11 +38,11 @@ public class HoodieSyncMetrics {
 
   private final String syncToolName;
 
-  public String recreateAndSyncTimerName;
-  public String recreateAndSyncFailureCounterName;
+  private String recreateAndSyncFailureCounterName;
+  private String recreateAndSyncTimerName;
 
-  public Timer recreateAndSyncTimer;
-  public Counter recreateAndSyncFailureCounter;
+  private Timer recreateAndSyncTimer;
+  private Counter recreateAndSyncFailureCounter;
 
   public HoodieSyncMetrics(HoodieSyncConfig config, String syncToolName) {
     this.config = config;
