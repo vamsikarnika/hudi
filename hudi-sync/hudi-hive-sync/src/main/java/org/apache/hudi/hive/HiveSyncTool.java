@@ -233,6 +233,11 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     final boolean tableExists = syncClient.tableExists(tableName);
     // Get the parquet schema for this table looking at the latest commit
     MessageType schema = syncClient.getStorageSchema(!config.getBoolean(HIVE_SYNC_OMIT_METADATA_FIELDS));
+    // if table exists and base path of the metastore table doesn't match the hoodie base path, recreate the table
+    if (tableExists && syncClient.getTableBasePath(tableName).equals(syncClient.getBasePath())) {
+      createOrReplaceTable(tableName, useRealtimeInputFormat, readAsOptimized, schema);
+    }
+
     boolean schemaChanged;
     boolean propertiesChanged;
     try {

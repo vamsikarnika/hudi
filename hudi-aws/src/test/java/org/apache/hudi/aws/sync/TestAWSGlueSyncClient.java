@@ -50,6 +50,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static org.apache.hudi.aws.testutils.GlueTestUtil.glueSyncProps;
+import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_BASE_PATH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.any;
@@ -193,6 +195,19 @@ class TestAWSGlueSyncClient {
     assertThrows(HoodieGlueSyncException.class, () -> awsGlueSyncClient.getMetastoreFieldSchemas(tableName));
   }
 
+  @Test
+  void testGetTableBasePath() {
+    String tableName = "testTable";
+    List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
+        Column.builder().name("age").type("int").comment("person's age").build());
+    CompletableFuture<GetTableResponse> tableResponse = getTableWithDefaultProps(tableName, columns, Collections.emptyList());
+    // mock aws glue get table call
+    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
+    String basePath = awsGlueSyncClient.getTableBasePath(tableName);
+    // verify if fields are present
+    assertEquals(glueSyncProps.get(META_SYNC_BASE_PATH.key()), basePath, "table base path should match meta sync base path");
+  }
+
   private CompletableFuture<GetTableResponse> getTableWithDefaultProps(String tableName, List<Column> columns, List<Column> partitionColumns) {
     String databaseName = "testdb";
     String inputFormatClass = "inputFormat";
@@ -203,6 +218,7 @@ class TestAWSGlueSyncClient {
     software.amazon.awssdk.services.glue.model.StorageDescriptor storageDescriptor = software.amazon.awssdk.services.glue.model.StorageDescriptor.builder()
         .serdeInfo(SerDeInfo.builder().serializationLibrary(serdeClass).parameters(serdeProperties).build())
         .inputFormat(inputFormatClass)
+        .location(glueSyncProps.getString(META_SYNC_BASE_PATH.key()))
         .columns(columns)
         .outputFormat(outputFormatClass)
         .build();
