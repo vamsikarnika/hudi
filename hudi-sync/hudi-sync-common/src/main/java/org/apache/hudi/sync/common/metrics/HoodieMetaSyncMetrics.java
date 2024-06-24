@@ -29,9 +29,9 @@ import com.codahale.metrics.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class HoodieSyncMetrics {
+public class HoodieMetaSyncMetrics {
 
-  private static final Logger LOG = LoggerFactory.getLogger(HoodieSyncMetrics.class);
+  private static final Logger LOG = LoggerFactory.getLogger(HoodieMetaSyncMetrics.class);
   private Metrics metrics;
   private HoodieSyncConfig config;
   private HoodieMetricsConfig metricsConfig;
@@ -44,7 +44,7 @@ public class HoodieSyncMetrics {
   private Timer recreateAndSyncTimer;
   private Counter recreateAndSyncFailureCounter;
 
-  public HoodieSyncMetrics(HoodieSyncConfig config, String syncToolName) {
+  public HoodieMetaSyncMetrics(HoodieSyncConfig config, String syncToolName) {
     this.config = config;
     this.metricsConfig = config.getMetricsConfig();
     this.syncToolName = syncToolName;

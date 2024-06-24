@@ -38,14 +38,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-public class TestHoodieSyncMetrics {
+public class TestHoodieMetaSyncMetrics {
 
 
   @Mock
   HoodieSyncConfig syncConfig;
   @Mock
   HoodieMetricsConfig metricsConfig;
-  HoodieSyncMetrics hoodieSyncMetrics;
+  HoodieMetaSyncMetrics hoodieSyncMetrics;
   Metrics metrics;
 
   @BeforeEach
@@ -55,7 +55,7 @@ public class TestHoodieSyncMetrics {
     when(metricsConfig.getMetricsReporterType()).thenReturn(MetricsReporterType.INMEMORY);
     when(metricsConfig.getBasePath()).thenReturn("s3://test" + UUID.randomUUID());
     when(metricsConfig.getMetricReporterMetricsNamePrefix()).thenReturn("test_prefix");
-    hoodieSyncMetrics = new HoodieSyncMetrics(syncConfig, "TestHiveSyncTool");
+    hoodieSyncMetrics = new HoodieMetaSyncMetrics(syncConfig, "TestHiveSyncTool");
     metrics = hoodieSyncMetrics.getMetrics();
   }
 
@@ -86,7 +86,7 @@ public class TestHoodieSyncMetrics {
   @Test
   void testEmitRecreateAndSyncFailureMetric_WithoutMetricsNamePrefix() {
     when(metricsConfig.getMetricReporterMetricsNamePrefix()).thenReturn("");
-    hoodieSyncMetrics = new HoodieSyncMetrics(syncConfig, "TestHiveSyncTool");
+    hoodieSyncMetrics = new HoodieMetaSyncMetrics(syncConfig, "TestHiveSyncTool");
     metrics = hoodieSyncMetrics.getMetrics();
     hoodieSyncMetrics.emitRecreateAndSyncFailureMetric();
     String metricsName = hoodieSyncMetrics.getMetricsName("counter", "meta_sync.recreate_table.failure");
