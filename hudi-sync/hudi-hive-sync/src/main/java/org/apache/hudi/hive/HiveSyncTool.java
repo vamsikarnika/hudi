@@ -22,6 +22,7 @@ import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieSyncTableStrategy;
 import org.apache.hudi.common.util.ConfigUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.InvalidTableException;
 import org.apache.hudi.hive.util.PartitionFilterGenerator;
@@ -234,8 +235,9 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     // Get the parquet schema for this table looking at the latest commit
     MessageType schema = syncClient.getStorageSchema(!config.getBoolean(HIVE_SYNC_OMIT_METADATA_FIELDS));
     // if table exists and base path of the metastore table doesn't match the hoodie base path, recreate the table
-    if (tableExists && syncClient.getTableBasePath(tableName).equals(syncClient.getBasePath())) {
-      createOrReplaceTable(tableName, useRealtimeInputFormat, readAsOptimized, schema);
+    if (tableExists && !syncClient.getTableBasePath(tableName).equals(syncClient.getBasePath())) {
+      recreateAndSyncHiveTable(tableName, useRealtimeInputFormat, readAsOptimized);
+      return;
     }
 
     boolean schemaChanged;
