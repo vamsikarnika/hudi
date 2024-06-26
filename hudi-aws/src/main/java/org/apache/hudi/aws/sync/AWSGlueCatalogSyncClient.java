@@ -647,8 +647,12 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
 
   @Override
   public String getTableBasePath(String tableName) {
-    Table table = getTable(awsGlue, databaseName, tableName);
-    return table.storageDescriptor().location();
+    try {
+      Table table = getTable(awsGlue, databaseName, tableName);
+      return table.storageDescriptor().location();
+    } catch (Exception e) {
+      throw new HoodieGlueSyncException("Fail to get base path for the table " + tableId(databaseName, tableName), e);
+    }
   }
 
   private List<Column> getColumnsFromSchema(Map<String, String> mapSchema) {
