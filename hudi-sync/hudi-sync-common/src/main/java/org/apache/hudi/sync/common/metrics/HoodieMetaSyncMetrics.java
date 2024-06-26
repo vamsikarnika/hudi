@@ -33,7 +33,6 @@ public class HoodieMetaSyncMetrics {
 
   private static final Logger LOG = LoggerFactory.getLogger(HoodieMetaSyncMetrics.class);
   private Metrics metrics;
-  private HoodieSyncConfig config;
   private HoodieMetricsConfig metricsConfig;
 
   private final String syncToolName;
@@ -45,7 +44,6 @@ public class HoodieMetaSyncMetrics {
   private Counter recreateAndSyncFailureCounter;
 
   public HoodieMetaSyncMetrics(HoodieSyncConfig config, String syncToolName) {
-    this.config = config;
     this.metricsConfig = config.getMetricsConfig();
     this.syncToolName = syncToolName;
     if (metricsConfig.isMetricsOn()) {
