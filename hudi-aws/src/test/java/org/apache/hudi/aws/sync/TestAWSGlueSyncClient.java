@@ -204,8 +204,8 @@ class TestAWSGlueSyncClient {
     // mock aws glue get table call
     Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
     String basePath = awsGlueSyncClient.getTableBasePath(tableName);
-    // verify if fields are present
-    assertEquals(glueSyncProps.get(META_SYNC_BASE_PATH.key()), basePath, "table base path should match meta sync base path");
+    // verify if table base path is correct
+    assertEquals(glueSyncProps.get(META_SYNC_BASE_PATH.key()), basePath, "table base path should match");
   }
 
   private CompletableFuture<GetTableResponse> getTableWithDefaultProps(String tableName, List<Column> columns, List<Column> partitionColumns) {
