@@ -646,7 +646,7 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
   }
 
   @Override
-  public String getTableBasePath(String tableName) {
+  public String getTableLocation(String tableName) {
     try {
       Table table = getTable(awsGlue, databaseName, tableName);
       return table.storageDescriptor().location();

@@ -190,7 +190,7 @@ public interface HoodieMetaSyncOperations {
   /**
    * Get the base path of the table from metastore
    */
-  default String getTableBasePath(String tableName) {
+  default String getTableLocation(String tableName) {
     return StringUtils.EMPTY_STRING;
   }
 

@@ -196,24 +196,24 @@ class TestAWSGlueSyncClient {
   }
 
   @Test
-  void testGetTableBasePath() {
+  void testGetTableLocation() {
     String tableName = "testTable";
     List<Column> columns = Arrays.asList(Column.builder().name("name").type("string").comment("person's name").build(),
         Column.builder().name("age").type("int").comment("person's age").build());
     CompletableFuture<GetTableResponse> tableResponse = getTableWithDefaultProps(tableName, columns, Collections.emptyList());
     // mock aws glue get table call
     Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
-    String basePath = awsGlueSyncClient.getTableBasePath(tableName);
+    String basePath = awsGlueSyncClient.getTableLocation(tableName);
     // verify if table base path is correct
     assertEquals(glueSyncProps.get(META_SYNC_BASE_PATH.key()), basePath, "table base path should match");
   }
 
   @Test
-  void testGetTableBasePath_ThrowsException() {
+  void testGetTableLocation_ThrowsException() {
     String tableName = "testTable";
     // mock aws glue get table call to throw an exception
     Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenThrow(EntityNotFoundException.class);
-    assertThrows(HoodieGlueSyncException.class, () -> awsGlueSyncClient.getTableBasePath(tableName));
+    assertThrows(HoodieGlueSyncException.class, () -> awsGlueSyncClient.getTableLocation(tableName));
   }
 
   private CompletableFuture<GetTableResponse> getTableWithDefaultProps(String tableName, List<Column> columns, List<Column> partitionColumns) {

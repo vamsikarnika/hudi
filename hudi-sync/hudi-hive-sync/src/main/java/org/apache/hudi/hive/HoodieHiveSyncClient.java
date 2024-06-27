@@ -471,7 +471,7 @@ public class HoodieHiveSyncClient extends HoodieSyncClient {
   }
 
   @Override
-  public String getTableBasePath(String tableName) {
+  public String getTableLocation(String tableName) {
     try {
       Table table = client.getTable(databaseName, tableName);
       return table.getSd().getLocation();
