@@ -273,6 +273,7 @@ public class MercifulJsonConverter {
       JsonToAvroFieldProcessor processor = getProcessorForSchema(schema);
       return processor.convertToRow(value, name, schema, shouldSanitize, invalidCharMask);
     }
+
     private static JsonToAvroFieldProcessor getProcessorForSchema(Schema schema) {
       JsonToAvroFieldProcessor processor = null;
 
@@ -336,6 +337,15 @@ public class MercifulJsonConverter {
 
     private static class DecimalLogicalTypeProcessor extends JsonToAvroFieldProcessor {
       @Override
+      public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        if (!isValidDecimalTypeConfig(schema)) {
+          return Pair.of(false, null);
+        }
+        Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
+        return Pair.of(parseResult.getLeft(), parseResult.getRight());
+      }
+
+      @Override
       public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
 
         if (!isValidDecimalTypeConfig(schema)) {
@@ -366,19 +376,6 @@ public class MercifulJsonConverter {
           return Pair.of(false, null);
         }
         BigDecimal bigDecimal = parseResult.getRight();
-
-        // As we don't do rounding, the validation will enforce the scale part and the integer part are all within the
-        // limit. As a result, if scale is 2 precision is 5, we only allow 3 digits for the integer.
-        // Allowed: 123.45, 123, 0.12
-        // Disallowed: 1234 (4 digit integer while the scale has already reserved 2 digit out of the 5 digit precision)
-        //             123456, 0.12345
-        if (bigDecimal.scale() > decimalType.getScale()
-            || (bigDecimal.precision() - bigDecimal.scale()) > (decimalType.getPrecision() - decimalType.getScale())) {
-          // Correspond to case
-          // org.apache.avro.AvroTypeException: Cannot encode decimal with scale 5 as scale 2 without rounding.
-          // org.apache.avro.AvroTypeException: Cannot encode decimal with scale 3 as scale 2 without rounding
-          return Pair.of(false, null);
-        }
 
         switch (schema.getType()) {
           case BYTES:
@@ -417,14 +414,14 @@ public class MercifulJsonConverter {
        * BigDecimal value.
        */
       private static Pair<Boolean, BigDecimal> parseObjectToBigDecimal(Object obj, Schema schema) {
-        // Case 1: Object is a number.
+        BigDecimal bigDecimal = null;
         if (obj instanceof Number) {
           Number number = (Number) obj;
           // Special case integers and 0.0 to avoid conversion errors related to decimals with a scale of 0
           if (obj instanceof Integer || obj instanceof Long || obj instanceof Short || obj instanceof Byte || number.doubleValue() == 0.0) {
-            return Pair.of(true, BigDecimal.valueOf(number.longValue()));
+            bigDecimal = BigDecimal.valueOf(number.longValue());
           }
-          return Pair.of(true, BigDecimal.valueOf(number.doubleValue()));
+          bigDecimal = BigDecimal.valueOf(number.doubleValue());
         }
 
         // Case 2: Object is a number in String format.
@@ -432,22 +429,54 @@ public class MercifulJsonConverter {
           if (schema.getType() == Type.BYTES) {
             try {
               //encoded big decimal
-              BigDecimal bigDecimal = HoodieAvroUtils.convertBytesToBigDecimal(decodeStringToBigDecimalBytes(obj),
+              bigDecimal = HoodieAvroUtils.convertBytesToBigDecimal(decodeStringToBigDecimalBytes(obj),
                   (LogicalTypes.Decimal) schema.getLogicalType());
-              return Pair.of(true, bigDecimal);
             } catch (IllegalArgumentException e) {
               //no-op
             }
           }
-          BigDecimal bigDecimal = null;
-          try {
-            bigDecimal = new BigDecimal(((String) obj));
-          } catch (java.lang.NumberFormatException ignored) {
-            /* ignore */
+          // None fixed byte or fixed byte conversion failure would end up here.
+          if (bigDecimal == null) {
+            try {
+              bigDecimal = new BigDecimal(((String) obj));
+            } catch (java.lang.NumberFormatException ignored) {
+              /* ignore */
+            }
           }
-          return Pair.of(bigDecimal != null, bigDecimal);
+        } else if (schema.getType() == Type.FIXED) {
+          List<?> list = (List<?>) obj;
+          List<Integer> converval = list.stream()
+              .filter(Integer.class::isInstance)
+              .map(Integer.class::cast)
+              .collect(Collectors.toList());
+
+          byte[] byteArray = new byte[converval.size()];
+          for (int i = 0; i < converval.size(); i++) {
+            byteArray[i] = (byte) converval.get(i).intValue();
+          }
+          GenericFixed fixedValue = new GenericData.Fixed(schema, byteArray);
+          // Convert the GenericFixed to BigDecimal
+          bigDecimal = new Conversions.DecimalConversion().fromFixed(
+              fixedValue, schema, schema.getLogicalType());
         }
-        return Pair.of(false, null);
+
+        if (bigDecimal == null) {
+          return Pair.of(false, null);
+        }
+        // As we don't do rounding, the validation will enforce the scale part and the integer part are all within the
+        // limit. As a result, if scale is 2 precision is 5, we only allow 3 digits for the integer.
+        // Allowed: 123.45, 123, 0.12
+        // Disallowed: 1234 (4 digit integer while the scale has already reserved 2 digit out of the 5 digit precision)
+        //             123456, 0.12345
+        LogicalTypes.Decimal decimalType = (LogicalTypes.Decimal) schema.getLogicalType();
+        if (bigDecimal.scale() > decimalType.getScale()
+            || (bigDecimal.precision() - bigDecimal.scale()) > (decimalType.getPrecision() - decimalType.getScale())) {
+          // Correspond to case
+          // org.apache.avro.AvroTypeException: Cannot encode decimal with scale 5 as scale 2 without rounding.
+          // org.apache.avro.AvroTypeException: Cannot encode decimal with scale 3 as scale 2 without rounding
+          return Pair.of(false, null);
+        }
+        return Pair.of(bigDecimal != null, bigDecimal);
       }
     }
 
@@ -503,6 +532,12 @@ public class MercifulJsonConverter {
         return Pair.of(true, new GenericData.Fixed(schema, buffer.array()));
       }
 
+      @Override
+      public Pair<Boolean, Object> convertToRowInternal(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        throw new HoodieException("Duration type is not supported in Row object");
+      }
+
       /**
        * Check if the given schema is a valid decimal type configuration.
        */
@@ -522,39 +557,65 @@ public class MercifulJsonConverter {
     }
 
     /**
-     * Processor utility handling Number inputs. Consumed by TimeLogicalTypeProcessor.
+     * Processor utility handling Number inputs.
      */
-    private interface NumericParser {
-      // Convert the input number to Avro data type according to the class
-      // implementing this interface.
-      Pair<Boolean, Object> handleNumberValue(Number value);
+    abstract static class Parser {
+      abstract Pair<Boolean, Object> handleNumberValue(Number value);
 
-      // Convert the input number to Avro data type according to the class
-      // implementing this interface.
-      // @param value the input number in string format.
-      Pair<Boolean, Object> handleStringNumber(String value);
+      abstract Pair<Boolean, Object> handleStringNumber(String value);
 
-      interface IntParser extends NumericParser {
+      abstract Pair<Boolean, Object> handleStringValue(String value);
+
+      static class IntParser extends Parser {
         @Override
-        default Pair<Boolean, Object> handleNumberValue(Number value) {
+        public Pair<Boolean, Object> handleNumberValue(Number value) {
           return Pair.of(true, value.intValue());
         }
 
         @Override
-        default Pair<Boolean, Object> handleStringNumber(String value) {
+        public Pair<Boolean, Object> handleStringNumber(String value) {
           return Pair.of(true, Integer.parseInt(value));
+        }
+
+        @Override
+        public Pair<Boolean, Object> handleStringValue(String value) {
+          return Pair.of(true, Integer.valueOf(value));
         }
       }
 
-      interface LongParser extends NumericParser {
+      static class DateParser extends Parser {
+
+        private static long MILLI_SECONDS_PER_DAY = 86400000;
         @Override
-        default Pair<Boolean, Object> handleNumberValue(Number value) {
+        public Pair<Boolean, Object> handleNumberValue(Number value) {
+          return Pair.of(true, new java.sql.Date(value.intValue() * MILLI_SECONDS_PER_DAY));
+        }
+
+        @Override
+        public Pair<Boolean, Object> handleStringNumber(String value) {
+          return Pair.of(true, new java.sql.Date(Integer.parseInt(value) * MILLI_SECONDS_PER_DAY));
+        }
+
+        @Override
+        public Pair<Boolean, Object> handleStringValue(String value) {
+          return Pair.of(true, java.sql.Date.valueOf(value));
+        }
+      }
+
+      static class LongParser extends Parser {
+        @Override
+        public Pair<Boolean, Object> handleNumberValue(Number value) {
           return Pair.of(true, value.longValue());
         }
 
         @Override
-        default Pair<Boolean, Object> handleStringNumber(String value) {
+        public Pair<Boolean, Object> handleStringNumber(String value) {
           return Pair.of(true, Long.parseLong(value));
+        }
+
+        @Override
+        public Pair<Boolean, Object> handleStringValue(String value) {
+          return Pair.of(true, Long.valueOf(value));
         }
       }
     }
@@ -562,7 +623,7 @@ public class MercifulJsonConverter {
     /**
      * Base Class for converting object to avro logical type TimeMilli/TimeMicro.
      */
-    private abstract static class TimeLogicalTypeProcessor extends JsonToAvroFieldProcessor implements NumericParser {
+    private abstract static class TimeLogicalTypeProcessor extends JsonToAvroFieldProcessor {
 
       protected static final LocalDateTime LOCAL_UNIX_EPOCH = LocalDateTime.of(1970, 1, 1, 0, 0, 0, 0);
 
@@ -576,29 +637,25 @@ public class MercifulJsonConverter {
       /**
        * Main function that convert input to Object with java data type specified by schema
        */
-      @Override
-      public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+      public Pair<Boolean, Object> convertCommon(Parser parser, Object value, Schema schema) {
         LogicalType logicalType = schema.getLogicalType();
         if (logicalType == null) {
           return Pair.of(false, null);
         }
         logicalType.validate(schema);
         if (value instanceof Number) {
-          return handleNumberValue((Number) value);
+          return parser.handleNumberValue((Number) value);
         }
         if (value instanceof String) {
           String valStr = (String) value;
           if (ALL_DIGITS_WITH_OPTIONAL_SIGN.matcher(valStr).matches()) {
-            return handleStringNumber(valStr);
-          } else if (isWellFormedDateTime(valStr)) {
-            return handleStringValue(valStr);
+            return parser.handleStringNumber(valStr);
+          } else {
+            return parser.handleStringValue(valStr);
           }
         }
         return Pair.of(false, null);
       }
-
-      // Handle the case when the input is a string that may be parsed as a time.
-      protected abstract Pair<Boolean, Object> handleStringValue(String value);
 
       protected DateTimeFormatter getDateTimeFormatter() {
         DateTimeParseContext ctx = DATE_TIME_PARSE_CONTEXT_MAP.get(logicalTypeEnum);
@@ -712,7 +769,7 @@ public class MercifulJsonConverter {
        * Check if the given string is a well-formed date time string.
        * If no pattern is defined, it will always return true.
        */
-      private boolean isWellFormedDateTime(String value) {
+      protected boolean isWellFormedDateTime(String value) {
         Pattern pattern = getDateTimePattern();
         return pattern == null || pattern.matcher(value).matches();
       }
@@ -757,21 +814,36 @@ public class MercifulJsonConverter {
       }
     }
 
-    private static class DateLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.IntParser {
+    private static class DateLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public DateLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.DATE);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, LocalDate> result = convertToLocalDate(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        LocalDate date = result.getRight();
-        int daysSinceEpoch = (int) ChronoUnit.DAYS.between(LocalDate.ofEpochDay(0), date);
-        return Pair.of(true, daysSinceEpoch);
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.IntParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, LocalDate> result = convertToLocalDate(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                LocalDate date = result.getRight();
+                int daysSinceEpoch = (int) ChronoUnit.DAYS.between(LocalDate.ofEpochDay(0), date);
+                return Pair.of(true, daysSinceEpoch);
+              }
+            },
+            value, schema);
+      }
+
+      @Override
+      public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(new Parser.DateParser(), value, schema);
       }
 
       private Pair<Boolean, LocalDate> convertToLocalDate(String input) {
@@ -790,138 +862,197 @@ public class MercifulJsonConverter {
     /**
      * Processor for TimeMilli logical type.
      */
-    private static class TimeMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.IntParser {
+    private static class TimeMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public TimeMilliLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.TIME_MILLIS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, LocalTime> result = convertToLocalTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        LocalTime time = result.getRight();
-        Integer millisOfDay = time.toSecondOfDay() * 1000 + time.getNano() / 1000000;
-        return Pair.of(true, millisOfDay);
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.IntParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, LocalTime> result = convertToLocalTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                LocalTime time = result.getRight();
+                Integer millisOfDay = time.toSecondOfDay() * 1000 + time.getNano() / 1000000;
+                return Pair.of(true, millisOfDay);
+              }
+            },
+            value, schema);
       }
     }
 
     /**
      * Processor for TimeMicro logical type.
      */
-    private static class TimeMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.LongParser {
+    private static class TimeMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public TimeMicroLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.TIME_MICROS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, LocalTime> result = convertToLocalTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        LocalTime time = result.getRight();
-        Long microsOfDay = (long) time.toSecondOfDay() * 1000000 + time.getNano() / 1000;
-        return Pair.of(true, microsOfDay);
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.LongParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, LocalTime> result = convertToLocalTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                LocalTime time = result.getRight();
+                Long microsOfDay = (long) time.toSecondOfDay() * 1000000 + time.getNano() / 1000;
+                return Pair.of(true, microsOfDay);
+              }
+            },
+            value, schema);
       }
     }
 
     /**
      * Processor for TimeMicro logical type.
      */
-    private static class LocalTimestampMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.LongParser {
+    private static class LocalTimestampMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public LocalTimestampMicroLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.LOCAL_TIMESTAMP_MICROS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, LocalDateTime> result = convertToLocalDateTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        LocalDateTime time = result.getRight();
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.LongParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, LocalDateTime> result = convertToLocalDateTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                LocalDateTime time = result.getRight();
 
-        // Calculate the difference in milliseconds
-        long diffInMicros = LOCAL_UNIX_EPOCH.until(time, ChronoField.MICRO_OF_SECOND.getBaseUnit());
-        return Pair.of(true, diffInMicros);
+                // Calculate the difference in milliseconds
+                long diffInMicros = LOCAL_UNIX_EPOCH.until(time, ChronoField.MICRO_OF_SECOND.getBaseUnit());
+                return Pair.of(true, diffInMicros);
+              }
+            },
+            value, schema);
       }
     }
 
     /**
      * Processor for TimeMicro logical type.
      */
-    private static class TimestampMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.LongParser {
+    private static class TimestampMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public TimestampMicroLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.TIMESTAMP_MICROS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, Instant> result = convertToInstantTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        Instant time = result.getRight();
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.LongParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, Instant> result = convertToInstantTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                Instant time = result.getRight();
 
-        // Calculate the difference in milliseconds
-        long diffInMicro = Instant.EPOCH.until(time, ChronoField.MICRO_OF_SECOND.getBaseUnit());
-        return Pair.of(true, diffInMicro);
+                // Calculate the difference in milliseconds
+                long diffInMicro = Instant.EPOCH.until(time, ChronoField.MICRO_OF_SECOND.getBaseUnit());
+                return Pair.of(true, diffInMicro);
+              }
+            },
+            value, schema);
       }
     }
 
     /**
      * Processor for TimeMicro logical type.
      */
-    private static class LocalTimestampMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.LongParser {
+    private static class LocalTimestampMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public LocalTimestampMilliLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.LOCAL_TIMESTAMP_MILLIS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, LocalDateTime> result = convertToLocalDateTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        LocalDateTime time = result.getRight();
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.LongParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, LocalDateTime> result = convertToLocalDateTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                LocalDateTime time = result.getRight();
 
-        // Calculate the difference in milliseconds
-        long diffInMillis = LOCAL_UNIX_EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit());
-        return Pair.of(true, diffInMillis);
+                // Calculate the difference in milliseconds
+                long diffInMillis = LOCAL_UNIX_EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit());
+                return Pair.of(true, diffInMillis);
+              }
+            },
+            value, schema);
       }
     }
 
     /**
      * Processor for TimeMicro logical type.
      */
-    private static class TimestampMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor
-        implements NumericParser.LongParser {
+    private static class TimestampMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor {
       public TimestampMilliLogicalTypeProcessor() {
         super(AvroLogicalTypeEnum.TIMESTAMP_MILLIS);
       }
 
       @Override
-      public Pair<Boolean, Object> handleStringValue(String value) {
-        Pair<Boolean, Instant> result = convertToInstantTime(value);
-        if (!result.getLeft()) {
-          return Pair.of(false, null);
-        }
-        Instant time = result.getRight();
+      public Pair<Boolean, Object> convert(
+          Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertCommon(
+            new Parser.LongParser() {
+              @Override
+              public Pair<Boolean, Object> handleStringValue(String value) {
+                if (!isWellFormedDateTime(value)) {
+                  return Pair.of(false, null);
+                }
+                Pair<Boolean, Instant> result = convertToInstantTime(value);
+                if (!result.getLeft()) {
+                  return Pair.of(false, null);
+                }
+                Instant time = result.getRight();
 
-        // Calculate the difference in milliseconds
-        long diffInMillis = Instant.EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit());
-        return Pair.of(true, diffInMillis);
+                // Calculate the difference in milliseconds
+                long diffInMillis = Instant.EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit());
+                return Pair.of(true, diffInMillis);
+              }
+            },
+            value, schema);
       }
     }
 
-// done
     private static JsonToAvroFieldProcessor generateBooleanTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -934,7 +1065,6 @@ public class MercifulJsonConverter {
       };
     }
 
-// done
     private static JsonToAvroFieldProcessor generateIntTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -949,7 +1079,6 @@ public class MercifulJsonConverter {
       };
     }
 
-// done
     private static JsonToAvroFieldProcessor generateDoubleTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -979,7 +1108,6 @@ public class MercifulJsonConverter {
       };
     }
 
-// done
     private static JsonToAvroFieldProcessor generateLongTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -994,7 +1122,6 @@ public class MercifulJsonConverter {
       };
     }
 
-// done
     private static JsonToAvroFieldProcessor generateStringTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -1004,7 +1131,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateBytesTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -1020,7 +1146,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateFixedTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         private byte[] convertToJavaObject(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
@@ -1049,7 +1174,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateEnumTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         private Object convertToJavaObject(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
@@ -1072,7 +1196,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateRecordTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -1087,7 +1210,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateArrayTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         private List<Object> convertToJavaObject(ConvertInternalApi convertApi, Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
@@ -1127,7 +1249,6 @@ public class MercifulJsonConverter {
       };
     }
 
-//    done
     private static JsonToAvroFieldProcessor generateMapTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         public Map<String, Object> convertToJavaObject(
