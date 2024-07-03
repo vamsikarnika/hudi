@@ -29,6 +29,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.GenericRecordBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.spark.sql.Row;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -126,6 +127,21 @@ public class AvroConvertor implements Serializable {
     }
   }
 
+  public Row fromJsonToRow(String json) {
+    try {
+      initSchema();
+      initJsonConvertor();
+      return jsonConverter.convertToRow(json, schema);
+    } catch (Exception e) {
+      if (json != null) {
+        throw new HoodieSchemaException("Failed to convert schema from json to avro: " + json, e);
+      } else {
+        throw new HoodieSchemaException("Failed to convert schema from json to avro. Schema string was null.", e);
+      }
+    }
+  }
+
+
   public Either<GenericRecord,String> fromJsonWithError(String json) {
     GenericRecord genericRecord;
     try {
@@ -134,6 +150,16 @@ public class AvroConvertor implements Serializable {
       return new Right(json);
     }
     return new Left(genericRecord);
+  }
+
+  public Either<Row,String> fromJsonToRowWithError(String json) {
+    Row row;
+    try {
+      row = fromJsonToRow(json);
+    } catch (Exception e) {
+      return new Right(json);
+    }
+    return new Left(row);
   }
 
   public Schema getSchema() {

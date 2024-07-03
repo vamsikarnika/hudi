@@ -332,6 +332,12 @@
           <groupId>io.prometheus</groupId>
           <artifactId>simpleclient_pushgateway</artifactId>
       </dependency>
-
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+        <version>${spark32.version}</version>
+        <scope>provided</scope>
+        <optional>true</optional>
+      </dependency>
   </dependencies>
 </project>

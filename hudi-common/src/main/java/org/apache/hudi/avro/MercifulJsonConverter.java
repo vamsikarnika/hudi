@@ -59,6 +59,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
 
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_TIME;
@@ -116,6 +118,15 @@ public class MercifulJsonConverter {
     }
   }
 
+  public Row convertToRow(String json, Schema schema) {
+    try {
+      Map<String, Object> jsonObjectMap = mapper.readValue(json, Map.class);
+      return convertJsonToRow(jsonObjectMap, schema, shouldSanitize, invalidCharMask);
+    } catch (IOException e) {
+      throw new HoodieIOException(e.getMessage(), e);
+    }
+  }
+
   /**
    * Clear between fetches. If the schema changes or if two tables have the same schemaFullName then
    * can be issues
@@ -133,6 +144,21 @@ public class MercifulJsonConverter {
       }
     }
     return avroRecord;
+  }
+
+  protected static Row convertJsonToRow(Map<String, Object> inputJson, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+    List<Schema.Field> fields = schema.getFields();
+    List<Object> values = new ArrayList<>(Collections.nCopies(fields.size(), null));
+
+    for (Schema.Field f : fields) {
+      Object val = shouldSanitize ? getFieldFromJson(f, inputJson, schema.getFullName(), invalidCharMask) : inputJson.get(f.name());
+      if (val != null) {
+        values.set(f.pos(), convertJsonToRowField(val, f.name(), f.schema(), shouldSanitize, invalidCharMask));
+      } else {
+        values.set(f.pos(), GenericData.get().getDefaultValue(f));
+      }
+    }
+    return RowFactory.create(values.toArray());
   }
 
   private static Object getFieldFromJson(final Schema.Field fieldSchema, final Map<String, Object> inputJson, final String schemaFullName, final String invalidCharMask) {
@@ -172,7 +198,14 @@ public class MercifulJsonConverter {
         || schema.getTypes().get(1).getType().equals(Schema.Type.NULL));
   }
 
-  private static Object convertJsonToAvroField(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+  @FunctionalInterface
+  public
+  interface ConvertInternalApi {
+    Object apply(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask);
+  }
+
+  private static Object convertJsonToFieldInternal(
+      ConvertInternalApi api, Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
 
     if (isOptional(schema)) {
       if (value == null) {
@@ -185,24 +218,50 @@ public class MercifulJsonConverter {
       throw new HoodieJsonToAvroConversionException(null, name, schema, shouldSanitize, invalidCharMask);
     }
 
-    return JsonToAvroFieldProcessorUtil.convertToAvro(value, name, schema, shouldSanitize, invalidCharMask);
+    return api.apply(value, name, schema, shouldSanitize, invalidCharMask);
+  }
+
+  public static Object convertJsonToAvroField(
+      Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+    return convertJsonToFieldInternal(JsonToAvroFieldProcessorUtil::convertToAvro, value, name, schema, shouldSanitize, invalidCharMask);
+  }
+
+  protected static Object convertJsonToRowField(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+    return convertJsonToFieldInternal(JsonToAvroFieldProcessorUtil::convertToRow, value, name, schema, shouldSanitize, invalidCharMask);
   }
 
   private static class JsonToAvroFieldProcessorUtil {
+    @FunctionalInterface
+    public
+    interface UtilConvertInternalApi {
+      Pair<Boolean, Object> apply(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask);
+    }
+
     /**
      * Base Class for converting json to avro fields.
      */
     private abstract static class JsonToAvroFieldProcessor implements Serializable {
-
-      public Object convertToAvro(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
-        Pair<Boolean, Object> res = convert(value, name, schema, shouldSanitize, invalidCharMask);
+      private Object convertInternal(UtilConvertInternalApi api, Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        Pair<Boolean, Object> res = api.apply(value, name, schema, shouldSanitize, invalidCharMask);
         if (!res.getLeft()) {
           throw new HoodieJsonToAvroConversionException(value, name, schema, shouldSanitize, invalidCharMask);
         }
         return res.getRight();
       }
 
+      public Object convertToAvro(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertInternal(this::convert, value, name, schema, shouldSanitize, invalidCharMask);
+      }
+
+      public Object convertToRow(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convertInternal(this::convertToRowInternal, value, name, schema, shouldSanitize, invalidCharMask);
+      }
+
       protected abstract Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask);
+
+      protected Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        return convert(value, name, schema, shouldSanitize, invalidCharMask);
+      }
     }
 
     public static Object convertToAvro(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
@@ -210,6 +269,10 @@ public class MercifulJsonConverter {
       return processor.convertToAvro(value, name, schema, shouldSanitize, invalidCharMask);
     }
 
+    public static Object convertToRow(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+      JsonToAvroFieldProcessor processor = getProcessorForSchema(schema);
+      return processor.convertToRow(value, name, schema, shouldSanitize, invalidCharMask);
+    }
     private static JsonToAvroFieldProcessor getProcessorForSchema(Schema schema) {
       JsonToAvroFieldProcessor processor = null;
 
@@ -858,6 +921,7 @@ public class MercifulJsonConverter {
       }
     }
 
+// done
     private static JsonToAvroFieldProcessor generateBooleanTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -870,6 +934,7 @@ public class MercifulJsonConverter {
       };
     }
 
+// done
     private static JsonToAvroFieldProcessor generateIntTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -884,6 +949,7 @@ public class MercifulJsonConverter {
       };
     }
 
+// done
     private static JsonToAvroFieldProcessor generateDoubleTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -898,6 +964,7 @@ public class MercifulJsonConverter {
       };
     }
 
+// done
     private static JsonToAvroFieldProcessor generateFloatTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -912,6 +979,7 @@ public class MercifulJsonConverter {
       };
     }
 
+// done
     private static JsonToAvroFieldProcessor generateLongTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -926,6 +994,7 @@ public class MercifulJsonConverter {
       };
     }
 
+// done
     private static JsonToAvroFieldProcessor generateStringTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -935,6 +1004,7 @@ public class MercifulJsonConverter {
       };
     }
 
+//    done
     private static JsonToAvroFieldProcessor generateBytesTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
@@ -942,13 +1012,18 @@ public class MercifulJsonConverter {
           // Should return ByteBuffer (see GenericData.isBytes())
           return Pair.of(true, ByteBuffer.wrap(value.toString().getBytes()));
         }
+
+        @Override
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, value.toString().getBytes());
+        }
       };
     }
 
+//    done
     private static JsonToAvroFieldProcessor generateFixedTypeHandler() {
       return new JsonToAvroFieldProcessor() {
-        @Override
-        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        private byte[] convertToJavaObject(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
           // The ObjectMapper use List to represent FixedType
           // eg: "decimal_val": [0, 0, 14, -63, -52] will convert to ArrayList<Integer>
           List<Integer> converval = (List<Integer>) value;
@@ -958,57 +1033,137 @@ public class MercifulJsonConverter {
           }
           byte[] dst = new byte[schema.getFixedSize()];
           System.arraycopy(src, 0, dst, 0, Math.min(schema.getFixedSize(), src.length));
-          return Pair.of(true, new GenericData.Fixed(schema, dst));
+          return dst;
+        }
+
+        @Override
+        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, new GenericData.Fixed(
+            schema, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask)));
+        }
+
+        @Override
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask));
         }
       };
     }
 
+//    done
     private static JsonToAvroFieldProcessor generateEnumTypeHandler() {
       return new JsonToAvroFieldProcessor() {
-        @Override
-        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+        private Object convertToJavaObject(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
           if (schema.getEnumSymbols().contains(value.toString())) {
-            return Pair.of(true, new GenericData.EnumSymbol(schema, value.toString()));
+            return value.toString();
           }
           throw new HoodieJsonToAvroConversionException(String.format("Symbol %s not in enum", value.toString()),
               schema.getFullName(), schema, shouldSanitize, invalidCharMask);
         }
+
+        @Override
+        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, new GenericData.EnumSymbol(schema, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask)));
+        }
+
+        @Override
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask));
+        }
       };
     }
 
+//    done
     private static JsonToAvroFieldProcessor generateRecordTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
         public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
           return Pair.of(true, convertJsonToAvro((Map<String, Object>) value, schema, shouldSanitize, invalidCharMask));
         }
-      };
-    }
 
-    private static JsonToAvroFieldProcessor generateArrayTypeHandler() {
-      return new JsonToAvroFieldProcessor() {
         @Override
-        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
-          Schema elementSchema = schema.getElementType();
-          List<Object> listRes = new ArrayList<>();
-          for (Object v : (List) value) {
-            listRes.add(convertJsonToAvroField(v, name, elementSchema, shouldSanitize, invalidCharMask));
-          }
-          return Pair.of(true, new GenericData.Array<>(schema, listRes));
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, convertJsonToRow((Map<String, Object>) value, schema, shouldSanitize, invalidCharMask));
         }
       };
     }
 
-    private static JsonToAvroFieldProcessor generateMapTypeHandler() {
+//    done
+    private static JsonToAvroFieldProcessor generateArrayTypeHandler() {
       return new JsonToAvroFieldProcessor() {
+        private List<Object> convertToJavaObject(ConvertInternalApi convertApi, Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          Schema elementSchema = schema.getElementType();
+          List<Object> listRes = new ArrayList<>();
+          for (Object v : (List) value) {
+            listRes.add(convertApi.apply(v, name, elementSchema, shouldSanitize, invalidCharMask));
+          }
+          return listRes;
+        }
+
         @Override
         public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, new GenericData.Array<>(
+              schema,
+              convertToJavaObject(
+                  MercifulJsonConverter::convertJsonToAvroField,
+                  value,
+                  name,
+                  schema,
+                  shouldSanitize,
+                  invalidCharMask)));
+        }
+
+        @Override
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, new GenericData.Array<>(
+              schema,
+              convertToJavaObject(
+                  MercifulJsonConverter::convertJsonToRowField,
+                  value,
+                  name,
+                  schema,
+                  shouldSanitize,
+                  invalidCharMask)));
+        }
+      };
+    }
+
+//    done
+    private static JsonToAvroFieldProcessor generateMapTypeHandler() {
+      return new JsonToAvroFieldProcessor() {
+        public Map<String, Object> convertToJavaObject(
+            ConvertInternalApi convertApi,
+            Object value,
+            String name,
+            Schema schema,
+            boolean shouldSanitize,
+            String invalidCharMask) {
           Schema valueSchema = schema.getValueType();
           Map<String, Object> mapRes = new HashMap<>();
           for (Map.Entry<String, Object> v : ((Map<String, Object>) value).entrySet()) {
-            mapRes.put(v.getKey(), convertJsonToAvroField(v.getValue(), name, valueSchema, shouldSanitize, invalidCharMask));
+            mapRes.put(v.getKey(), convertApi.apply(v.getValue(), name, valueSchema, shouldSanitize, invalidCharMask));
           }
-          return Pair.of(true, mapRes);
+          return mapRes;
+        }
+
+        @Override
+        public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, convertToJavaObject(MercifulJsonConverter::convertJsonToAvroField,
+              value,
+              name,
+              schema,
+              shouldSanitize,
+              invalidCharMask));
+        }
+
+        @Override
+        public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
+          return Pair.of(true, convertToJavaObject(
+              MercifulJsonConverter::convertJsonToRowField,
+              value,
+              name,
+              schema,
+              shouldSanitize,
+              invalidCharMask));
         }
       };
     }
