@@ -24,6 +24,7 @@ import org.apache.hudi.exception.HoodieIOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Conversions;
+import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -155,7 +156,11 @@ public class MercifulJsonConverter {
       if (val != null) {
         values.set(f.pos(), convertJsonToRowField(val, f.name(), f.schema(), shouldSanitize, invalidCharMask));
       } else {
-        values.set(f.pos(), GenericData.get().getDefaultValue(f));
+        Object defaultVal = f.defaultVal();
+        if (defaultVal.equals(JsonProperties.NULL_VALUE)) {
+          defaultVal = null;
+        }
+        values.set(f.pos(), defaultVal);
       }
     }
     return RowFactory.create(values.toArray());

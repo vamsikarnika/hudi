@@ -29,6 +29,8 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -42,6 +44,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,9 +60,10 @@ public class TestMercifulJsonConverter {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final MercifulJsonConverter CONVERTER = new MercifulJsonConverter(true,"__");
 
+  private static final String SIMPLE_AVRO_WITH_DEFAULT = "/simple-test-with-default-value.avsc";
   @Test
   public void basicConversion() throws IOException {
-    Schema simpleSchema = SchemaTestUtil.getSimpleSchema();
+    Schema simpleSchema = SchemaTestUtil.getSchema(SIMPLE_AVRO_WITH_DEFAULT);
     String name = "John Smith";
     int number = 1337;
     String color = "Blue. No yellow!";
@@ -72,9 +76,21 @@ public class TestMercifulJsonConverter {
     GenericRecord rec = new GenericData.Record(simpleSchema);
     rec.put("name", name);
     rec.put("favorite_number", number);
+    rec.put("age", null);
     rec.put("favorite_color", color);
+    rec.put("email", null);
 
     assertEquals(rec, CONVERTER.convert(json, simpleSchema));
+
+    List<Object> values = new ArrayList<>(Collections.nCopies(simpleSchema.getFields().size(), null));
+    values.set(0, name);
+    values.set(1, number);
+    values.set(2, simpleSchema.getFields().get(2).defaultVal());
+    values.set(3, color);
+    values.set(4, null);
+    Row recRow = RowFactory.create(values.toArray());
+
+    assertEquals(recRow, CONVERTER.convertToRow(json, simpleSchema));
   }
 
   private static final String DECIMAL_AVRO_FILE_INVALID_PATH = "/decimal-logical-type-invalid.avsc";
@@ -104,6 +120,10 @@ public class TestMercifulJsonConverter {
 
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    Row expectRow = RowFactory.create(bigDecimal);
+    Row realRow = CONVERTER.convertToRow(json, schema);
+    assertEquals(expectRow, realRow);
   }
 
   private static final String DECIMAL_FIXED_AVRO_FILE_PATH = "/decimal-logical-type-fixed-type.avsc";
@@ -128,6 +148,11 @@ public class TestMercifulJsonConverter {
     // Schedule with timestamp same as that of committed instant
     assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
+    });
+
+    // Schedule with timestamp same as that of committed instant
+    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+      CONVERTER.convertToRow(json, schema);
     });
   }
 
@@ -203,6 +228,10 @@ public class TestMercifulJsonConverter {
 
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    Row expectRow = RowFactory.create(bigDecimal);
+    Row realRow = CONVERTER.convertToRow(json, schema);
+    assertEquals(expectRow, realRow);
   }
 
   static Stream<Object> decimalGoodCases() {
@@ -289,6 +318,11 @@ public class TestMercifulJsonConverter {
 
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(durationRecord, real);
+
+    // Duration type is not supported in Row object.
+    assertThrows(org.apache.hudi.exception.HoodieException.class, () -> {
+      CONVERTER.convertToRow(json, schema);
+    });
   }
 
   static Stream<Object> durationGoodCases() {
@@ -328,6 +362,7 @@ public class TestMercifulJsonConverter {
 
   private static final String DATE_AVRO_FILE_PATH = "/date-type.avsc";
   private static final String DATE_AVRO_INVALID_FILE_PATH = "/date-type-invalid.avsc";
+  private static long MILLI_SECONDS_PER_DAY = 86400000;
   /**
    * Covered case:
    * Avro Logical Type: Date
@@ -337,27 +372,38 @@ public class TestMercifulJsonConverter {
    * */
   @ParameterizedTest
   @MethodSource("dataProvider")
-  void dateLogicalTypeTest(int groundTruth, Object dateInput) throws IOException {
+  void dateLogicalTypeTest(int groundTruthAvro, String groundTruthRow, Object dateInput) throws IOException {
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(DATE_AVRO_FILE_PATH);
     GenericRecord record = new GenericData.Record(schema);
-    record.put("dateField", groundTruth);
+    record.put("dateField", groundTruthAvro);
 
     Map<String, Object> data = new HashMap<>();
     data.put("dateField", dateInput);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    if (groundTruthRow == null) {
+      return;
+    }
+    Row rec = RowFactory.create(java.sql.Date.valueOf(groundTruthRow));
+    Row realRow = CONVERTER.convertToRow(json, schema);
+    assertEquals(rec.getDate(0).toString(), realRow.getDate(0).toString());
   }
 
   static Stream<Object> dataProvider() {
     return Stream.of(
-        Arguments.of(18506, 18506), // epochDays
-        Arguments.of(18506, "2020-09-01"),  // dateString
-        Arguments.of(7323356, "+22020-09-01"),  // dateString
-        Arguments.of(18506, "18506"),  // epochDaysString
-        Arguments.of(Integer.MAX_VALUE, Integer.toString(Integer.MAX_VALUE)),
-        Arguments.of(Integer.MIN_VALUE, Integer.toString(Integer.MIN_VALUE))
+        // 18506 epoch days since Unix epoch is 2020-09-01, while
+        // 18506 * MILLI_SECONDS_PER_DAY is 2020-08-31.
+        // That's why you see for same 18506 days from avro side we can have different
+        // row equivalence.
+        Arguments.of(18506, "2020-09-01", 18506), // epochDays
+        Arguments.of(18506, "2020-09-01", "2020-09-01"),  // dateString
+        Arguments.of(7323356, null, "+22020-09-01"),  // dateString, not supported by row
+        Arguments.of(18506, "2020-09-01", "18506"),  // epochDaysString, not supported by row
+        Arguments.of(Integer.MAX_VALUE, null, Integer.toString(Integer.MAX_VALUE)), // not supported by row
+        Arguments.of(Integer.MIN_VALUE, null, Integer.toString(Integer.MIN_VALUE)) // not supported by row
     );
   }
 
@@ -378,6 +424,9 @@ public class TestMercifulJsonConverter {
     String json = MAPPER.writeValueAsString(data);
     assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
+    });
+    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+      CONVERTER.convertToRow(json, schema);
     });
   }
 
@@ -409,6 +458,9 @@ public class TestMercifulJsonConverter {
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    Row rec = RowFactory.create(milliSecOfDay, microSecOfDay);
+    assertEquals(rec, CONVERTER.convertToRow(json, schema));
   }
 
   static Stream<Object> localTimestampGoodCaseProvider() {
@@ -501,6 +553,10 @@ public class TestMercifulJsonConverter {
     assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
+
+    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+      CONVERTER.convertToRow(json, schema);
+    });
   }
 
   static Stream<Object> localTimestampBadCaseProvider() {
@@ -570,6 +626,9 @@ public class TestMercifulJsonConverter {
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    Row rec = RowFactory.create(milliSecOfDay, microSecOfDay);
+    assertEquals(rec, CONVERTER.convertToRow(json, schema));
   }
 
   static Stream<Object> timestampGoodCaseProvider() {
@@ -710,6 +769,10 @@ public class TestMercifulJsonConverter {
     assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
+
+    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+      CONVERTER.convertToRow(json, schema);
+    });
   }
 
   static Stream<Object> timestampBadCaseProvider() {
@@ -747,6 +810,11 @@ public class TestMercifulJsonConverter {
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
     assertEquals(record, real);
+
+    Row rec = RowFactory.create(microSecOfDay, milliSecOfDay);
+    Row realRow = CONVERTER.convertToRow(json, schema);
+    assertEquals(rec.get(0).toString(), realRow.get(0).toString());
+    assertEquals(rec.get(1).toString(), realRow.get(1).toString());
   }
 
   static Stream<Object> timeGoodCaseProvider() {
@@ -792,6 +860,10 @@ public class TestMercifulJsonConverter {
     assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
+
+    assertThrows(Exception.class, () -> {
+      CONVERTER.convertToRow(json, schema);
+    });
   }
 
   static Stream<Object> timeBadCaseProvider() {
@@ -820,7 +892,10 @@ public class TestMercifulJsonConverter {
     data.put("uuidField", uuid);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
+
     assertEquals(record, real);
+    Row rec = RowFactory.create(uuid);
+    assertEquals(rec, CONVERTER.convertToRow(json, schema));
   }
 
   static Stream<Object> uuidDimension() {
@@ -876,6 +951,14 @@ public class TestMercifulJsonConverter {
     rec.put("favorite_color", color);
 
     assertEquals(rec, CONVERTER.convert(json, sanitizedSchema));
+
+    List<Object> values = new ArrayList<>(Collections.nCopies(sanitizedSchema.getFields().size(), null));
+    values.set(0, name);
+    values.set(1, number);
+    values.set(2, color);
+    values.set(3, "default_value");
+    Row recRow = RowFactory.create(values.toArray());
+    assertEquals(recRow, CONVERTER.convertToRow(json, sanitizedSchema));
   }
 
   @Test
