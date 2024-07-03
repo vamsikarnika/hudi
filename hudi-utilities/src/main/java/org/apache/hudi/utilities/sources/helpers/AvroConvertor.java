@@ -141,7 +141,6 @@ public class AvroConvertor implements Serializable {
     }
   }
 
-
   public Either<GenericRecord,String> fromJsonWithError(String json) {
     GenericRecord genericRecord;
     try {

@@ -1093,7 +1093,6 @@ public class MercifulJsonConverter {
       };
     }
 
-// done
     private static JsonToAvroFieldProcessor generateFloatTypeHandler() {
       return new JsonToAvroFieldProcessor() {
         @Override
