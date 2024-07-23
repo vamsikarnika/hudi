@@ -36,6 +36,7 @@ import org.apache.hudi.sync.common.util.SparkDataSourceTableUtils;
 import com.beust.jcommander.JCommander;
 import com.codahale.metrics.Timer;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.parquet.schema.MessageType;
 import org.slf4j.Logger;
@@ -234,7 +235,8 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     // Get the parquet schema for this table looking at the latest commit
     MessageType schema = syncClient.getStorageSchema(!config.getBoolean(HIVE_SYNC_OMIT_METADATA_FIELDS));
     // if table exists and location of the metastore table doesn't match the hoodie base path, recreate the table
-    if (tableExists && !syncClient.getTableLocation(tableName).equals(syncClient.getBasePath())) {
+    if (tableExists && isBasePathChanged(syncClient.getBasePath(), syncClient.getTableLocation(tableName))) {
+      LOG.info("basepath is updated for the table {}", tableName);
       recreateAndSyncHiveTable(tableName, useRealtimeInputFormat, readAsOptimized);
       return;
     }
@@ -263,6 +265,12 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
         recreateAndSyncHiveTable(tableName, useRealtimeInputFormat, readAsOptimized);
       }
     }
+  }
+
+  private boolean isBasePathChanged(String tableBasePathStr, String tableLocation) {
+    String tableBasePathWithoutSchema = Path.getPathWithoutSchemeAndAuthority(new Path(tableBasePathStr)).toUri().getPath();
+    String tableLocationPathWithoutSchema = Path.getPathWithoutSchemeAndAuthority(new Path(tableLocation)).toUri().getPath();
+    return !tableBasePathWithoutSchema.equals(tableLocationPathWithoutSchema);
   }
 
   private void checkAndCreateDatabase() {

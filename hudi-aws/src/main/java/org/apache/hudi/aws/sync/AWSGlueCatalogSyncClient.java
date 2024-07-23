@@ -394,26 +394,11 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
       // Create a temp table will validate the schema before dropping and recreating the table
       String tempTableName = generateTempTableName(tableName);
       createTable(tempTableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
-
-      Table tempTable = getTable(awsGlue, databaseName, tempTableName);
-      final Instant now = Instant.now();
-      TableInput updatedTableInput = TableInput.builder()
-          .name(tableName)
-          .tableType(tempTable.tableType())
-          .parameters(tempTable.parameters())
-          .partitionKeys(tempTable.partitionKeys())
-          .storageDescriptor(tempTable.storageDescriptor())
-          .lastAccessTime(now)
-          .lastAnalyzedTime(now)
-          .build();
-
-      UpdateTableRequest request = UpdateTableRequest.builder()
-          .databaseName(databaseName)
-          .skipArchive(skipTableArchive)
-          .tableInput(updatedTableInput)
-          .build();
-      awsGlue.updateTable(request);
+      // drop the temp table
       dropTable(tempTableName);
+      // drop and recreate the actual table
+      dropTable(tableName);
+      createTable(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
     } catch (Exception e) {
       throw new HoodieGlueSyncException("Fail to recreate the table" + tableId(databaseName, tableName), e);
     }

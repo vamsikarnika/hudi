@@ -41,7 +41,6 @@ import software.amazon.awssdk.services.glue.model.GetTableRequest;
 import software.amazon.awssdk.services.glue.model.GetTableResponse;
 import software.amazon.awssdk.services.glue.model.SerDeInfo;
 import software.amazon.awssdk.services.glue.model.Table;
-import software.amazon.awssdk.services.glue.model.UpdateTableRequest;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -117,10 +116,8 @@ class TestAWSGlueSyncClient {
 
     awsGlueSyncClient.createOrReplaceTable(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
 
-    // Verify that awsGlue.updateTable() is called exactly once
-    verify(mockAwsGlue, times(1)).updateTable(any(UpdateTableRequest.class));
-    verify(mockAwsGlue, times(0)).createTable(any(CreateTableRequest.class));
-    verify(mockAwsGlue, times(1)).deleteTable(any(DeleteTableRequest.class));
+    verify(mockAwsGlue, times(2)).deleteTable(any(DeleteTableRequest.class));
+    verify(mockAwsGlue, times(3)).getTable(any(GetTableRequest.class));
   }
 
   @Test
