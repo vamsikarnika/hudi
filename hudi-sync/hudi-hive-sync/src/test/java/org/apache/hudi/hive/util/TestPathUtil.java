@@ -50,5 +50,13 @@ public class TestPathUtil {
     path1 = "gs://test_bucket_one/table/base/path";
     path2 = "gs://test_bucket_one/table/base/path";
     assertTrue(PathUtil.comparePathsWithoutScheme(path1, path2), "should return true since bucket names and path matches");
+
+    path1 = "file:/var/table/base/path";
+    path2 = "/var/table/base/path";
+    assertTrue(PathUtil.comparePathsWithoutScheme(path1, path2), "should return true since path matches");
+
+    path1 = "file:/var/table/base/path";
+    path2 = "file:/var/table/old_base/path";
+    assertFalse(PathUtil.comparePathsWithoutScheme(path1, path2), "should return false since path doesn't matches");
   }
 }
