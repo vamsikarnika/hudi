@@ -25,8 +25,10 @@ public class PathUtil {
   public static boolean comparePathsWithoutScheme(String pathStr1, String pathStr2) {
     Path path1 = new Path(pathStr1);
     Path path2 = new Path(pathStr2);
-    Path pathWithoutScheme1 = new Path(null, path1.toUri().getAuthority(), path1.toUri().getPath());
-    Path pathWithoutScheme2 = new Path(null, path2.toUri().getAuthority(), path2.toUri().getPath());
+    Path pathWithoutScheme1 = path1.isUriPathAbsolute()
+        ? new Path(null, path1.toUri().getAuthority(), path1.toUri().getPath()) : path1;
+    Path pathWithoutScheme2 = path2.isUriPathAbsolute()
+        ? new Path(null, path2.toUri().getAuthority(), path2.toUri().getPath()) : path2;
     return pathWithoutScheme1.equals(pathWithoutScheme2);
   }
 }
