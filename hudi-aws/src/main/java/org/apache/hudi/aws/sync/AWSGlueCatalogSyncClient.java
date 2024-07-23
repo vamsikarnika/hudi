@@ -400,6 +400,12 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
     }
   }
 
+  /**
+   * creates a temp table with the given schema and properties to ensure
+   * table creation succeeds before dropping the table and recreating it.
+   * This ensures that actual table is not dropped in case there are any
+   * issues with table creation because of provided schema or properties
+   */
   private void validateSchemaAndProperties(String tableName,
                                            MessageType storageSchema,
                                            String inputFormatClass,
