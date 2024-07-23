@@ -389,19 +389,29 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
       createTable(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
       return;
     }
-
     try {
-      // Create a temp table will validate the schema before dropping and recreating the table
-      String tempTableName = generateTempTableName(tableName);
-      createTable(tempTableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
-      // drop the temp table
-      dropTable(tempTableName);
+      // validate before dropping the table
+      validateSchemaAndProperties(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
       // drop and recreate the actual table
       dropTable(tableName);
       createTable(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
     } catch (Exception e) {
       throw new HoodieGlueSyncException("Fail to recreate the table" + tableId(databaseName, tableName), e);
     }
+  }
+
+  private void validateSchemaAndProperties(String tableName,
+                                           MessageType storageSchema,
+                                           String inputFormatClass,
+                                           String outputFormatClass,
+                                           String serdeClass,
+                                           Map<String, String> serdeProperties,
+                                           Map<String, String> tableProperties) {
+    // Create a temp table to validate the schema and properties
+    String tempTableName = generateTempTableName(tableName);
+    createTable(tempTableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
+    // drop the temp table
+    dropTable(tempTableName);
   }
 
   @Override

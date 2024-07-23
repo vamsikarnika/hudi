@@ -26,13 +26,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TestPathUtil {
 
   @Test
-  void testComparePathsWithoutSchemeAndAuthority() {
+  void testComparePathsWithoutScheme() {
     String path1 = "s3://test_bucket_one/table/base/path";
     String path2 = "s3a://test_bucket_two/table/base/path";
-    assertTrue(PathUtil.comparePathsWithoutSchemeAndAuthority(path1, path2), "should return true since paths match without file shema");
+    assertFalse(PathUtil.comparePathsWithoutScheme(path1, path2), "should return false since bucket names dont match");
 
     path1 = "s3a://test_bucket_one/table/new_base/path";
     path2 = "s3a://test_bucket_one/table/old_base/path";
-    assertFalse(PathUtil.comparePathsWithoutSchemeAndAuthority(path1, path2), "should return false since paths don't match without file shema");
+    assertFalse(PathUtil.comparePathsWithoutScheme(path1, path2), "should return false since paths don't match");
+
+    path1 = "s3://test_bucket_one/table/base/path";
+    path2 = "s3a://test_bucket_one/table/base/path";
+    assertTrue(PathUtil.comparePathsWithoutScheme(path1, path2), "should return false since bucket names match without file shema");
+
+    path1 = "s3a://test_bucket_one/table/base/path";
+    path2 = "s3a://test_bucket_one/table/base/path";
+    assertTrue(PathUtil.comparePathsWithoutScheme(path1, path2), "should return true since bucket names and path matches");
+
+    path1 = "gs://test_bucket_one/table/base/path";
+    path2 = "gs://test_bucket_two/table/base/path";
+    assertFalse(PathUtil.comparePathsWithoutScheme(path1, path2), "should return true since bucket names and path matches");
+
+    path1 = "gs://test_bucket_one/table/base/path";
+    path2 = "gs://test_bucket_one/table/base/path";
+    assertTrue(PathUtil.comparePathsWithoutScheme(path1, path2), "should return true since bucket names and path matches");
   }
 }

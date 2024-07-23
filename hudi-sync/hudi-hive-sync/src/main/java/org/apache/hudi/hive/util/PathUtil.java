@@ -22,9 +22,10 @@ import org.apache.hadoop.fs.Path;
 
 public class PathUtil {
 
-  public static boolean comparePathsWithoutSchemeAndAuthority(String path1, String path2) {
-    String pathWithoutSchema1 = Path.getPathWithoutSchemeAndAuthority(new Path(path1)).toUri().getPath();
-    String pathWithoutSchema2 = Path.getPathWithoutSchemeAndAuthority(new Path(path2)).toUri().getPath();
-    return pathWithoutSchema1.equals(pathWithoutSchema2);
+  public static boolean comparePathsWithoutScheme(String pathStr1, String pathStr2) {
+    Path path1 = new Path(pathStr1);
+    Path path2 = new Path(pathStr2);
+    return path1.toUri().getAuthority().equals(path2.toUri().getAuthority())
+        && path1.toUri().getPath().equals(path2.toUri().getPath());
   }
 }
