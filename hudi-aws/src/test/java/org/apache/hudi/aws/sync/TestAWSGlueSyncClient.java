@@ -48,6 +48,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static org.apache.hudi.aws.testutils.GlueTestUtil.glueSyncProps;
 import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_BASE_PATH;
@@ -82,7 +83,7 @@ class TestAWSGlueSyncClient {
   }
 
   @Test
-  void testCreateOrReplaceTable_TableExists() {
+  void testCreateOrReplaceTable_TableExists() throws ExecutionException, InterruptedException {
     String tableName = "testTable";
     String databaseName = "testdb";
     String inputFormatClass = "inputFormat";
@@ -96,20 +97,28 @@ class TestAWSGlueSyncClient {
         .inputFormat(inputFormatClass)
         .outputFormat(outputFormatClass)
         .build();
-    Table tempTable = Table.builder()
-        .name("tempTable")
+    Table table = Table.builder()
+        .name(tableName)
         .tableType("COPY_ON_WRITE")
         .parameters(new HashMap<>())
         .storageDescriptor(storageDescriptor)
         .databaseName(databaseName)
         .build();
-    GetTableResponse response = GetTableResponse.builder()
-        .table(tempTable)
+
+    GetTableResponse tableResponse = GetTableResponse.builder()
+        .table(table)
         .build();
 
+    GetTableRequest getTableRequestForTable = GetTableRequest.builder().databaseName(databaseName).name(tableName).build();
     // Mock methods
-    CompletableFuture<GetTableResponse> tableResponse = CompletableFuture.completedFuture(response);
-    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(tableResponse);
+    CompletableFuture<GetTableResponse> tableResponseFuture = CompletableFuture.completedFuture(tableResponse);
+    CompletableFuture<GetTableResponse> mockTableNotFoundResponse = Mockito.mock(CompletableFuture.class);
+    ExecutionException executionException = new ExecutionException("failed to get table", EntityNotFoundException.builder().build());
+    Mockito.when(mockTableNotFoundResponse.get()).thenThrow(executionException);
+
+    Mockito.when(mockAwsGlue.getTable(any(GetTableRequest.class))).thenReturn(mockTableNotFoundResponse);
+    Mockito.when(mockAwsGlue.getTable(getTableRequestForTable)).thenReturn(tableResponseFuture).thenReturn(mockTableNotFoundResponse);
+    Mockito.when(mockAwsGlue.createTable(any(CreateTableRequest.class))).thenReturn(CompletableFuture.completedFuture(CreateTableResponse.builder().build()));
 
     CompletableFuture<DeleteTableResponse> deleteTableResponse = CompletableFuture.completedFuture(DeleteTableResponse.builder().build());
     Mockito.when(mockAwsGlue.deleteTable(any(DeleteTableRequest.class))).thenReturn(deleteTableResponse);
@@ -118,6 +127,7 @@ class TestAWSGlueSyncClient {
 
     verify(mockAwsGlue, times(2)).deleteTable(any(DeleteTableRequest.class));
     verify(mockAwsGlue, times(3)).getTable(any(GetTableRequest.class));
+    verify(mockAwsGlue, times(2)).createTable(any(CreateTableRequest.class));
   }
 
   @Test
