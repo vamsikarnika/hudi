@@ -389,6 +389,7 @@ public class AWSGlueCatalogSyncClient extends HoodieSyncClient {
       createTable(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
       return;
     }
+
     try {
       // validate before dropping the table
       validateSchemaAndProperties(tableName, storageSchema, inputFormatClass, outputFormatClass, serdeClass, serdeProperties, tableProperties);
