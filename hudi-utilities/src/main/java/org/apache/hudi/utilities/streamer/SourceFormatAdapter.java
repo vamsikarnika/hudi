@@ -43,7 +43,6 @@ import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.StructType;
-import org.example.SynchronizerForTest;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -172,7 +171,6 @@ public class SourceFormatAdapter implements Closeable {
    * Fetch new data in avro format. If the source provides data in different format, they are translated to Avro format
    */
   public InputBatch<JavaRDD<GenericRecord>> fetchNewDataInAvroFormat(Option<String> lastCkptStr, long sourceLimit) {
-    new SynchronizerForTest("f6");
     switch (source.getSourceType()) {
       case AVRO:
         //don't need to sanitize because it's already avro
@@ -228,7 +226,6 @@ public class SourceFormatAdapter implements Closeable {
    * Fetch new data in row format. If the source provides data in different format, they are translated to Row format
    */
   public InputBatch<Dataset<Row>> fetchNewDataInRowFormat(Option<String> lastCkptStr, long sourceLimit) {
-    new SynchronizerForTest("f5");
     switch (source.getSourceType()) {
       case ROW:
         //we do the sanitizing here if enabled
