@@ -204,8 +204,7 @@ public class MercifulJsonConverter {
   }
 
   @FunctionalInterface
-  public
-  interface ConvertInternalApi {
+  public interface ConvertInternalApi {
     Object apply(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask);
   }
 
@@ -237,8 +236,7 @@ public class MercifulJsonConverter {
 
   private static class JsonToAvroFieldProcessorUtil {
     @FunctionalInterface
-    public
-    interface UtilConvertInternalApi {
+    public interface UtilConvertInternalApi {
       Pair<Boolean, Object> apply(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask);
     }
 

@@ -111,8 +111,6 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.HoodieDataTypeUtils;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.tools.ant.taskdefs.Sync;
-import org.example.SynchronizerForTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -595,15 +593,12 @@ public class StreamSync implements Serializable, Closeable {
    */
   @VisibleForTesting
   Pair<InputBatch, Boolean> fetchNextBatchFromSource(Option<String> resumeCheckpointStr, HoodieTableMetaClient metaClient) {
-    new SynchronizerForTest("fdss");
     Option<JavaRDD<GenericRecord>> avroRDDOptional = null;
     String checkpointStr = null;
     SchemaProvider schemaProvider = null;
     InputBatch inputBatchForWriter = null; // row writer
     boolean reconcileSchema = props.getBoolean(DataSourceWriteOptions.RECONCILE_SCHEMA().key());
     if (transformer.isPresent()) {
-      new SynchronizerForTest("f1");
-
       // Transformation is needed. Fetch New rows in Row Format, apply transformation and then convert them
       // to generic records for writing
       InputBatch<Dataset<Row>> dataAndCheckpoint =
@@ -618,7 +613,6 @@ public class StreamSync implements Serializable, Closeable {
       checkpointStr = dataAndCheckpoint.getCheckpointForNextBatch();
       if (this.userProvidedSchemaProvider != null && this.userProvidedSchemaProvider.getTargetSchema() != null
           && this.userProvidedSchemaProvider.getTargetSchema() != InputBatch.NULL_SCHEMA) {
-        new SynchronizerForTest("f2");
         // Let's deduce the schema provider for writer side first!
         schemaProvider = getDeducedSchemaProvider(this.userProvidedSchemaProvider.getTargetSchema(), this.userProvidedSchemaProvider, metaClient);
         boolean useRowWriter = canUseRowWriter(schemaProvider.getTargetSchema());
@@ -633,7 +627,6 @@ public class StreamSync implements Serializable, Closeable {
           if (errorTableWriter.isPresent()
               && props.getBoolean(HoodieErrorTableConfig.ERROR_ENABLE_VALIDATE_TARGET_SCHEMA.key(),
               HoodieErrorTableConfig.ERROR_ENABLE_VALIDATE_TARGET_SCHEMA.defaultValue())) {
-            new SynchronizerForTest("f3");
             // If the above conditions are met, trigger error events for the rows whose conversion to
             // avro records fails.
             avroRDDOptional = transformed.map(
@@ -652,7 +645,6 @@ public class StreamSync implements Serializable, Closeable {
           }
         }
       } else {
-        new SynchronizerForTest("f4");
         // Deduce proper target (writer's) schema for the input dataset, reconciling its
         // schema w/ the table's one
         Schema incomingSchema = transformed.map(df ->
