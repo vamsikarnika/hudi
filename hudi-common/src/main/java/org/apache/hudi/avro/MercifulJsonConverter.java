@@ -428,10 +428,8 @@ public class MercifulJsonConverter {
           } else {
             bigDecimal = BigDecimal.valueOf(number.doubleValue());
           }
-        }
-
-        // Case 2: Object is a number in String format.
-        if (obj instanceof String) {
+        } else if (obj instanceof String) {
+          // Case 2: Object is a number in String format.
           if (schema.getType() == Type.BYTES) {
             try {
               //encoded big decimal
@@ -482,7 +480,7 @@ public class MercifulJsonConverter {
           // org.apache.avro.AvroTypeException: Cannot encode decimal with scale 3 as scale 2 without rounding
           return Pair.of(false, null);
         }
-        return Pair.of(bigDecimal != null, bigDecimal);
+        return Pair.of(true, bigDecimal);
       }
     }
 
