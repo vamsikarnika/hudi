@@ -21,7 +21,7 @@ package org.apache.hudi.utilities.sources;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.exception.SchemaCompatibilityException;
+import org.apache.hudi.internal.schema.HoodieSchemaException;
 import org.apache.hudi.utilities.config.HoodieStreamerConfig;
 import org.apache.hudi.utilities.streamer.SourceFormatAdapter;
 import org.apache.hudi.utilities.testutils.UtilitiesTestBase;
@@ -84,7 +84,7 @@ public class TestJsonDFSSource extends AbstractDFSSourceTestBase {
     Throwable t = assertThrows(Exception.class,
         () -> batch.getBatch().get().show(30));
     while (t != null) {
-      if (t instanceof SchemaCompatibilityException) {
+      if (t instanceof HoodieSchemaException) {
         return;
       }
       t = t.getCause();

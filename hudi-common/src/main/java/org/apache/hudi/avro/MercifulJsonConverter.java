@@ -63,6 +63,8 @@ import java.util.stream.Collectors;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 
+import scala.collection.JavaConverters;
+
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_TIME;
 
@@ -1238,15 +1240,14 @@ public class MercifulJsonConverter {
 
         @Override
         public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
-          return Pair.of(true, new GenericData.Array<>(
-              schema,
+          return Pair.of(true,
               convertToJavaObject(
                   MercifulJsonConverter::convertJsonToRowField,
                   value,
                   name,
                   schema,
                   shouldSanitize,
-                  invalidCharMask)));
+                  invalidCharMask).toArray());
         }
       };
     }
@@ -1280,13 +1281,15 @@ public class MercifulJsonConverter {
 
         @Override
         public Pair<Boolean, Object> convertToRowInternal(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
-          return Pair.of(true, convertToJavaObject(
-              MercifulJsonConverter::convertJsonToRowField,
-              value,
-              name,
-              schema,
-              shouldSanitize,
-              invalidCharMask));
+          return Pair.of(true, JavaConverters
+              .mapAsScalaMapConverter(
+                  convertToJavaObject(
+                      MercifulJsonConverter::convertJsonToRowField,
+                      value,
+                      name,
+                      schema,
+                      shouldSanitize,
+                      invalidCharMask)).asScala());
         }
       };
     }
