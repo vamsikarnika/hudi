@@ -146,9 +146,9 @@ public class AvroConvertor implements Serializable {
     try {
       genericRecord = fromJson(json);
     } catch (Exception e) {
-      return new Right(json);
+      return new Right<>(json);
     }
-    return new Left(genericRecord);
+    return new Left<>(genericRecord);
   }
 
   public Either<Row,String> fromJsonToRowWithError(String json) {
@@ -156,9 +156,9 @@ public class AvroConvertor implements Serializable {
     try {
       row = fromJsonToRow(json);
     } catch (Exception e) {
-      return new Right(json);
+      return new Right<>(json);
     }
-    return new Left(row);
+    return new Left<>(row);
   }
 
   public Schema getSchema() {

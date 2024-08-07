@@ -24,7 +24,6 @@ import org.apache.hudi.exception.HoodieIOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Conversions;
-import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;

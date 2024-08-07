@@ -362,7 +362,6 @@ public class TestMercifulJsonConverter {
 
   private static final String DATE_AVRO_FILE_PATH = "/date-type.avsc";
   private static final String DATE_AVRO_INVALID_FILE_PATH = "/date-type-invalid.avsc";
-  private static long MILLI_SECONDS_PER_DAY = 86400000;
   /**
    * Covered case:
    * Avro Logical Type: Date

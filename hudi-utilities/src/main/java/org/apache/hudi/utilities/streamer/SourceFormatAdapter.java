@@ -139,9 +139,9 @@ public class SourceFormatAdapter implements Closeable {
     return inputBatch.getBatch().map(rdd -> {
       if (errorTableWriter.isPresent()) {
         JavaRDD<Either<Row,String>> javaRDD = rdd.map(convertor::fromJsonToRowWithError);
-        errorTableWriter.get().addErrorEvents(javaRDD.filter(x -> x.isRight()).map(x ->
+        errorTableWriter.get().addErrorEvents(javaRDD.filter(Either::isRight).map(x ->
             new ErrorEvent<>(x.right().get(), ErrorEvent.ErrorReason.JSON_ROW_DESERIALIZATION_FAILURE)));
-        return javaRDD.filter(x -> x.isLeft()).map(x -> x.left().get());
+        return javaRDD.filter(Either::isLeft).map(x -> x.left().get());
       } else {
         return rdd.map(convertor::fromJsonToRow);
       }
