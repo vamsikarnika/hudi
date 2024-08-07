@@ -126,7 +126,7 @@ public class MercifulJsonConverter {
       Map<String, Object> jsonObjectMap = mapper.readValue(json, Map.class);
       return convertJsonToRow(jsonObjectMap, schema, shouldSanitize, invalidCharMask);
     } catch (IOException e) {
-      throw new HoodieIOException(e.getMessage(), e);
+      throw new HoodieIOException("Failed to convert json to row", e);
     }
   }
 
@@ -157,12 +157,6 @@ public class MercifulJsonConverter {
       Object val = shouldSanitize ? getFieldFromJson(f, inputJson, schema.getFullName(), invalidCharMask) : inputJson.get(f.name());
       if (val != null) {
         values.set(f.pos(), convertJsonToRowField(val, f.name(), f.schema(), shouldSanitize, invalidCharMask));
-      } else {
-        Object defaultVal = f.defaultVal();
-        if (defaultVal.equals(JsonProperties.NULL_VALUE)) {
-          defaultVal = null;
-        }
-        values.set(f.pos(), defaultVal);
       }
     }
     return RowFactory.create(values.toArray());
