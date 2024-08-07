@@ -339,6 +339,27 @@ public class MercifulJsonConverter {
         if (!isValidDecimalTypeConfig(schema)) {
           return Pair.of(false, null);
         }
+
+        if (schema.getType() == Type.FIXED && value instanceof List<?>) {
+          // Case 1: Input is a list. It is expected to be raw Fixed byte array input, and we only support
+          // parsing it to Fixed avro type.
+          JsonToAvroFieldProcessor processor = generateFixedTypeHandler();
+          Pair<Boolean, Object> fixedTypeResult = processor.convertToRowInternal(value, name, schema, shouldSanitize, invalidCharMask);
+          if (fixedTypeResult.getLeft()) {
+            byte[] byteArray = (byte[]) fixedTypeResult.getRight();
+            GenericFixed fixedValue = new GenericData.Fixed(schema, byteArray);
+            // Convert the GenericFixed to BigDecimal
+            return Pair.of(true, new Conversions
+                .DecimalConversion()
+                .fromFixed(
+                    fixedValue,
+                    schema,
+                    schema.getLogicalType()
+                )
+            );
+          }
+        }
+
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         return Pair.of(parseResult.getLeft(), parseResult.getRight());
       }
@@ -350,21 +371,11 @@ public class MercifulJsonConverter {
           return Pair.of(false, null);
         }
 
-        if (schema.getType() == Type.FIXED) {
-          if (value instanceof List<?>) {
-            // Case 1: Input is a list. It is expected to be raw Fixed byte array input, and we only support
-            // parsing it to Fixed avro type.
-            JsonToAvroFieldProcessor processor = generateFixedTypeHandler();
-            return processor.convert(value, name, schema, shouldSanitize, invalidCharMask);
-          } else if (value instanceof String) {
-            try {
-              // It is a kafka encoded string that is here because of the spark avro post processor
-              Object fixed = HoodieAvroUtils.convertBytesToFixed(decodeStringToBigDecimalBytes(value), schema);
-              return Pair.of(true, fixed);
-            } catch (IllegalArgumentException e) {
-              // no-op
-            }
-          }
+        if (schema.getType() == Type.FIXED && value instanceof List<?>) {
+          // Case 1: Input is a list. It is expected to be raw Fixed byte array input, and we only support
+          // parsing it to Fixed avro type.
+          JsonToAvroFieldProcessor processor = generateFixedTypeHandler();
+          return processor.convert(value, name, schema, shouldSanitize, invalidCharMask);
         }
 
         // Case 2: Input is a number or String number.
@@ -423,14 +434,12 @@ public class MercifulJsonConverter {
           }
         } else if (obj instanceof String) {
           // Case 2: Object is a number in String format.
-          if (schema.getType() == Type.BYTES) {
-            try {
-              //encoded big decimal
-              bigDecimal = HoodieAvroUtils.convertBytesToBigDecimal(decodeStringToBigDecimalBytes(obj),
-                  (LogicalTypes.Decimal) schema.getLogicalType());
-            } catch (IllegalArgumentException e) {
-              //no-op
-            }
+          try {
+            //encoded big decimal
+            bigDecimal = HoodieAvroUtils.convertBytesToBigDecimal(decodeStringToBigDecimalBytes(obj),
+                (LogicalTypes.Decimal) schema.getLogicalType());
+          } catch (IllegalArgumentException e) {
+            //no-op
           }
           // None fixed byte or fixed byte conversion failure would end up here.
           if (bigDecimal == null) {
@@ -440,21 +449,6 @@ public class MercifulJsonConverter {
               /* ignore */
             }
           }
-        } else if (schema.getType() == Type.FIXED) {
-          List<?> list = (List<?>) obj;
-          List<Integer> converval = list.stream()
-              .filter(Integer.class::isInstance)
-              .map(Integer.class::cast)
-              .collect(Collectors.toList());
-
-          byte[] byteArray = new byte[converval.size()];
-          for (int i = 0; i < converval.size(); i++) {
-            byteArray[i] = (byte) converval.get(i).intValue();
-          }
-          GenericFixed fixedValue = new GenericData.Fixed(schema, byteArray);
-          // Convert the GenericFixed to BigDecimal
-          bigDecimal = new Conversions.DecimalConversion().fromFixed(
-              fixedValue, schema, schema.getLogicalType());
         }
 
         if (bigDecimal == null) {

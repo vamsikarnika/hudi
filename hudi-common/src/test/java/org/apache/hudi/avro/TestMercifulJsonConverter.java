@@ -85,7 +85,7 @@ public class TestMercifulJsonConverter {
     List<Object> values = new ArrayList<>(Collections.nCopies(simpleSchema.getFields().size(), null));
     values.set(0, name);
     values.set(1, number);
-    values.set(2, simpleSchema.getFields().get(2).defaultVal());
+    values.set(2, null);
     values.set(3, color);
     values.set(4, null);
     Row recRow = RowFactory.create(values.toArray());
@@ -955,7 +955,6 @@ public class TestMercifulJsonConverter {
     values.set(0, name);
     values.set(1, number);
     values.set(2, color);
-    values.set(3, "default_value");
     Row recRow = RowFactory.create(values.toArray());
     assertEquals(recRow, CONVERTER.convertToRow(json, sanitizedSchema));
   }
