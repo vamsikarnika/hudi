@@ -360,6 +360,7 @@ public class MercifulJsonConverter {
           }
         }
 
+        // Case 2: Input is a number or String number or base64 encoded string number
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         return Pair.of(parseResult.getLeft(), parseResult.getRight());
       }
@@ -378,7 +379,7 @@ public class MercifulJsonConverter {
           return processor.convert(value, name, schema, shouldSanitize, invalidCharMask);
         }
 
-        // Case 2: Input is a number or String number.
+        // Case 2: Input is a number or String number or base64 encoded string number.
         LogicalTypes.Decimal decimalType = (LogicalTypes.Decimal) schema.getLogicalType();
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         if (Boolean.FALSE.equals(parseResult.getLeft())) {

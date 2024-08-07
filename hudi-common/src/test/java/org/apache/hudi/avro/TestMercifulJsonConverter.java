@@ -76,18 +76,14 @@ public class TestMercifulJsonConverter {
     GenericRecord rec = new GenericData.Record(simpleSchema);
     rec.put("name", name);
     rec.put("favorite_number", number);
-    rec.put("age", null);
     rec.put("favorite_color", color);
-    rec.put("email", null);
 
     assertEquals(rec, CONVERTER.convert(json, simpleSchema));
 
     List<Object> values = new ArrayList<>(Collections.nCopies(simpleSchema.getFields().size(), null));
     values.set(0, name);
     values.set(1, number);
-    values.set(2, null);
     values.set(3, color);
-    values.set(4, null);
     Row recRow = RowFactory.create(values.toArray());
 
     assertEquals(recRow, CONVERTER.convertToRow(json, simpleSchema));

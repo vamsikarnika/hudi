@@ -357,7 +357,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
   }
 
   @Test
-  public void testErrorEventsForDataInRowFormatWithSanitizationEnabled() throws IOException {
+  void testErrorEventsForDataInRowFormatWithSanitizationEnabled() {
     // topic setup.
     final String topic = TEST_TOPIC_PREFIX + "testErrorEventsForDataInRowFormatWithSanitizationEnabled";
 
