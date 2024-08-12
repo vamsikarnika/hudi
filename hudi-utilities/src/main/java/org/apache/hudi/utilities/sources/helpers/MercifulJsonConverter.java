@@ -299,7 +299,7 @@ public class MercifulJsonConverter {
           }
         }
 
-        // Case 2: Input is a number or String number.
+        // Case 2: Input is a number or String number or base64 encoded string number.
         LogicalTypes.Decimal decimalType = (LogicalTypes.Decimal) schema.getLogicalType();
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         if (Boolean.FALSE.equals(parseResult.getLeft())) {

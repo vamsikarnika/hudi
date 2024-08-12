@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.avro;
+package org.apache.hudi.utilities.sources.helpers;
 
 import org.apache.hudi.common.testutils.SchemaTestUtil;
 
@@ -52,12 +52,12 @@ import static org.apache.hudi.common.testutils.HoodieTestDataGenerator.TRIP_ENCO
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class TestMercifulJsonConverter {
+class TestMercifulJsonConverter {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final MercifulJsonConverter CONVERTER = new MercifulJsonConverter(true,"__");
 
   @Test
-  public void basicConversion() throws IOException {
+  void basicConversion() throws IOException {
     Schema simpleSchema = SchemaTestUtil.getSimpleSchema();
     String name = "John Smith";
     int number = 1337;
@@ -167,7 +167,7 @@ public class TestMercifulJsonConverter {
     Map<String, Object> data = new HashMap<>();
 
     Schema schema = SchemaTestUtil.getSchema(avroFilePath);
-    GenericRecord record = new GenericData.Record(schema);
+    GenericRecord genericRecord = new GenericData.Record(schema);
     Conversions.DecimalConversion conv = new Conversions.DecimalConversion();
     Schema decimalFieldSchema = schema.getField("decimalField").schema();
 
@@ -194,15 +194,15 @@ public class TestMercifulJsonConverter {
 
     // Decide the decimal field expected output according to the test dimension.
     if (avroFilePath.equals(DECIMAL_AVRO_FILE_PATH) || avroFilePath.equals(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH)) {
-      record.put("decimalField", conv.toBytes(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
+      genericRecord.put("decimalField", conv.toBytes(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
     } else {
-      record.put("decimalField", conv.toFixed(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
+      genericRecord.put("decimalField", conv.toFixed(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
     }
 
     String json = MAPPER.writeValueAsString(data);
 
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> decimalGoodCases() {
@@ -254,13 +254,13 @@ public class TestMercifulJsonConverter {
     String json = String.format("{\"decimalField\":%s}", inputValue);
 
     if (shouldConvert) {
-      GenericRecord record = new GenericData.Record(schema);
+      GenericRecord genericRecord = new GenericData.Record(schema);
       Conversions.DecimalConversion conv = new Conversions.DecimalConversion();
       Schema decimalFieldSchema = schema.getField("decimalField").schema();
-      record.put("decimalField", conv.toBytes(new BigDecimal(expected), decimalFieldSchema, decimalFieldSchema.getLogicalType()));
+      genericRecord.put("decimalField", conv.toBytes(new BigDecimal(expected), decimalFieldSchema, decimalFieldSchema.getLogicalType()));
 
       GenericRecord real = CONVERTER.convert(json, schema);
-      assertEquals(record, real);
+      assertEquals(genericRecord, real);
     } else {
       assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> CONVERTER.convert(json, schema));
     }
@@ -378,14 +378,14 @@ public class TestMercifulJsonConverter {
   void dateLogicalTypeTest(int groundTruth, Object dateInput) throws IOException {
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(DATE_AVRO_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("dateField", groundTruth);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("dateField", groundTruth);
 
     Map<String, Object> data = new HashMap<>();
     data.put("dateField", dateInput);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> dataProvider() {
@@ -408,8 +408,8 @@ public class TestMercifulJsonConverter {
   void dateLogicalTypeTest() throws IOException {
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(DATE_AVRO_INVALID_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("dateField", 1);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("dateField", 1);
 
     Map<String, Object> data = new HashMap<>();
     data.put("dateField", 1);
@@ -437,16 +437,16 @@ public class TestMercifulJsonConverter {
 
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(LOCAL_TIME_AVRO_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("localTimestampMillisField", milliSecOfDay);
-    record.put("localTimestampMicrosField", microSecOfDay);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("localTimestampMillisField", milliSecOfDay);
+    genericRecord.put("localTimestampMicrosField", microSecOfDay);
 
     Map<String, Object> data = new HashMap<>();
     data.put("localTimestampMillisField", timeMilli);
     data.put("localTimestampMicrosField", timeMicro);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> localTimestampGoodCaseProvider() {
@@ -598,16 +598,16 @@ public class TestMercifulJsonConverter {
 
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(TIMESTAMP_AVRO_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("timestampMillisField", milliSecOfDay);
-    record.put("timestampMicrosField", microSecOfDay);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("timestampMillisField", milliSecOfDay);
+    genericRecord.put("timestampMicrosField", microSecOfDay);
 
     Map<String, Object> data = new HashMap<>();
     data.put("timestampMillisField", timeMilli);
     data.put("timestampMicrosField", timeMicro);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> timestampGoodCaseProvider() {
@@ -775,16 +775,16 @@ public class TestMercifulJsonConverter {
 
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(TIME_AVRO_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("timeMicroField", microSecOfDay);
-    record.put("timeMillisField", milliSecOfDay);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("timeMicroField", microSecOfDay);
+    genericRecord.put("timeMillisField", milliSecOfDay);
 
     Map<String, Object> data = new HashMap<>();
     data.put("timeMicroField", timeMicro);
     data.put("timeMillisField", timeMilli);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> timeGoodCaseProvider() {
@@ -851,14 +851,14 @@ public class TestMercifulJsonConverter {
   void uuidLogicalTypeTest(String uuid) throws IOException {
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(UUID_AVRO_FILE_PATH);
-    GenericRecord record = new GenericData.Record(schema);
-    record.put("uuidField", uuid);
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    genericRecord.put("uuidField", uuid);
 
     Map<String, Object> data = new HashMap<>();
     data.put("uuidField", uuid);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(record, real);
+    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> uuidDimension() {

@@ -19,7 +19,6 @@
 package org.apache.hudi.common.util;
 
 import com.esotericsoftware.kryo.Kryo;
-import org.apache.hudi.common.HoodieJsonPayload;
 import org.apache.hudi.common.model.AWSDmsAvroPayload;
 import org.apache.hudi.common.model.DefaultHoodieRecordPayload;
 import org.apache.hudi.common.model.EventTimeAvroPayload;
@@ -79,7 +78,6 @@ public class HoodieCommonKryoRegistrar {
         //kryo.register(BootstrapRecordPayload.class);
         AWSDmsAvroPayload.class,
         HoodieAvroPayload.class,
-        HoodieJsonPayload.class,
         HoodieMetadataPayload.class,
 
         HoodieRecordLocation.class,
