@@ -16,8 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.avro;
+package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hudi.avro.AvroLogicalTypeEnum;
+import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
@@ -360,7 +362,6 @@ public class MercifulJsonConverter {
           }
         }
 
-        // Case 2: Input is a number or String number or base64 encoded string number
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         return Pair.of(parseResult.getLeft(), parseResult.getRight());
       }
@@ -379,7 +380,7 @@ public class MercifulJsonConverter {
           return processor.convert(value, name, schema, shouldSanitize, invalidCharMask);
         }
 
-        // Case 2: Input is a number or String number or base64 encoded string number.
+        // Case 2: Input is a number or String number.
         LogicalTypes.Decimal decimalType = (LogicalTypes.Decimal) schema.getLogicalType();
         Pair<Boolean, BigDecimal> parseResult = parseObjectToBigDecimal(value, schema);
         if (Boolean.FALSE.equals(parseResult.getLeft())) {
@@ -1155,7 +1156,7 @@ public class MercifulJsonConverter {
         @Override
         public Pair<Boolean, Object> convert(Object value, String name, Schema schema, boolean shouldSanitize, String invalidCharMask) {
           return Pair.of(true, new GenericData.Fixed(
-            schema, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask)));
+              schema, convertToJavaObject(value, name, schema, shouldSanitize, invalidCharMask)));
         }
 
         @Override

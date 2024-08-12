@@ -19,7 +19,6 @@
 package org.apache.hudi.common.testutils;
 
 import org.apache.hudi.avro.HoodieAvroUtils;
-import org.apache.hudi.avro.MercifulJsonConverter;
 import org.apache.hudi.common.model.HoodieAvroPayload;
 import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.model.HoodieKey;
@@ -304,7 +303,7 @@ public final class SchemaTestUtil {
   public static GenericRecord generateAvroRecordFromJson(Schema schema, int recordNumber, String instantTime,
       String fileId, boolean populateMetaFields) throws IOException {
     SampleTestRecord record = new SampleTestRecord(instantTime, recordNumber, fileId, populateMetaFields);
-    MercifulJsonConverter converter = new MercifulJsonConverter();
+    JsonToAvroConverter converter = new JsonToAvroConverter();
     return converter.convert(record.toJsonString(), schema);
   }
 
