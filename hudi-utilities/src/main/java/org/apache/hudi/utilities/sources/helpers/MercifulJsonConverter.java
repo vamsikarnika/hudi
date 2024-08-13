@@ -22,8 +22,9 @@ import org.apache.hudi.avro.AvroLogicalTypeEnum;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
-import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.utilities.exception.HoodieJsonConverterException;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Conversions;
 import org.apache.avro.LogicalType;
@@ -34,7 +35,6 @@ import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -117,8 +117,8 @@ public class MercifulJsonConverter {
     try {
       Map<String, Object> jsonObjectMap = mapper.readValue(json, Map.class);
       return convertJsonToAvro(jsonObjectMap, schema, shouldSanitize, invalidCharMask);
-    } catch (IOException e) {
-      throw new HoodieIOException(e.getMessage(), e);
+    } catch (HoodieException | JsonProcessingException e) {
+      throw new HoodieJsonConverterException("Failed to convert json to avro", e);
     }
   }
 
@@ -126,8 +126,8 @@ public class MercifulJsonConverter {
     try {
       Map<String, Object> jsonObjectMap = mapper.readValue(json, Map.class);
       return convertJsonToRow(jsonObjectMap, schema, shouldSanitize, invalidCharMask);
-    } catch (IOException e) {
-      throw new HoodieIOException("Failed to convert json to row", e);
+    } catch (HoodieException | JsonProcessingException e) {
+      throw new HoodieJsonConverterException("Failed to convert json to row", e);
     }
   }
 
