@@ -78,9 +78,7 @@ class TestMercifulJsonConverter {
     GenericRecord rec = new GenericData.Record(simpleSchema);
     rec.put("name", name);
     rec.put("favorite_number", number);
-    rec.put("age", null);
     rec.put("favorite_color", color);
-    rec.put("email", null);
 
     assertEquals(rec, CONVERTER.convert(json, simpleSchema));
 
