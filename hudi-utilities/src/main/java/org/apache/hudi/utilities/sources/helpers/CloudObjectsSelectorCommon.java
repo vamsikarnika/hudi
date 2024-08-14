@@ -55,10 +55,13 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.common.util.ConfigUtils.containsConfigProperty;
@@ -307,7 +310,7 @@ public class CloudObjectsSelectorCommon {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       dataset = dropAliasesWithCoalesce(dataset, sourceSchema);
     }
-    
+
     // add partition column from source path if configured
     if (containsConfigProperty(properties, PATH_BASED_PARTITION_FIELDS)) {
       String[] partitionKeysToAdd = getStringWithAltKeys(properties, PATH_BASED_PARTITION_FIELDS).split(",");
@@ -323,50 +326,47 @@ public class CloudObjectsSelectorCommon {
   }
 
   private StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
-    List<StructField> aliasFields = getAliasStructTypes(avroSchema, rowSchema);
-    for (StructField aliasField : aliasFields) {
-      rowSchema = rowSchema.add(aliasField);
-    }
-    return rowSchema;
+    List<StructField> aliasFields = extractAliasFields(avroSchema, rowSchema);
+    StructField[] existingFields = rowSchema.fields();
+    return new StructType(Stream.concat(
+        Arrays.stream(existingFields),
+        aliasFields.stream()
+    ).toArray(StructField[]::new));
   }
 
   private Dataset<Row> dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
-    for (Schema.Field field : sourceSchema.getFields()) {
-      if (!field.aliases().isEmpty()) {
-        dataset = getDatasetWithCoalescedFields(dataset, field.name(), field.aliases());
-      }
-    }
-    return dataset;
+    // Process all fields with aliases and coalesce them in the dataset
+    return sourceSchema.getFields().stream()
+        .filter(field -> !field.aliases().isEmpty())
+        .reduce(dataset, (ds, field) -> coalesceFieldAliases(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
   }
 
-  private Dataset<Row> getDatasetWithCoalescedFields(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
+  private Dataset<Row> coalesceFieldAliases(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
+    // Build a list of columns to coalesce
     List<Column> columns = new ArrayList<>();
     columns.add(dataset.col(fieldName));
     aliases.forEach(alias -> columns.add(dataset.col(alias)));
+
+    // Coalesce columns and drop aliases
     Dataset<Row> coalescedDataset = dataset.withColumn(fieldName, functions.coalesce(columns.toArray(new Column[0])));
-    for (String alias : aliases) {
-      coalescedDataset = coalescedDataset.drop(alias);
-    }
-    return coalescedDataset;
+    return coalescedDataset.drop(aliases.toArray(new String[0]));
   }
 
-  private static List<StructField> getAliasStructTypes(Schema avroSchema, StructType rowSchema) {
+  private static List<StructField> extractAliasFields(Schema avroSchema, StructType rowSchema) {
     List<StructField> aliasFields = new ArrayList<>();
+    Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
+        .collect(Collectors.toMap(StructField::name, Function.identity()));
+
     for (Schema.Field avroField : avroSchema.getFields()) {
       String avroFieldName = avroField.name();
-      if (avroField.aliases().isEmpty()) {
-        continue;
-      }
+      StructField rowField = rowFieldsMap.get(avroFieldName);
 
-      for (StructField rowField : rowSchema.fields()) {
-        if (rowField.name().equals(avroFieldName)) {
-          for (String alias : avroField.aliases()) {
-            aliasFields.add(new StructField(alias, rowField.dataType(), true, rowField.metadata()));
-          }
+      if (rowField != null && !avroField.aliases().isEmpty()) {
+        for (String alias : avroField.aliases()) {
+          aliasFields.add(new StructField(alias, rowField.dataType(), true, rowField.metadata()));
         }
       }
     }
-
     return aliasFields;
   }
 
