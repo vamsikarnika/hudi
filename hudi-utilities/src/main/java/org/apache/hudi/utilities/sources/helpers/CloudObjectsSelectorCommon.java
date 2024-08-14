@@ -39,11 +39,15 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.functions;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,10 +57,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.common.util.ConfigUtils.containsConfigProperty;
+import static org.apache.hudi.common.util.ConfigUtils.getBooleanWithAltKeys;
 import static org.apache.hudi.common.util.ConfigUtils.getStringWithAltKeys;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.CLOUD_DATAFILE_EXTENSION;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.IGNORE_RELATIVE_PATH_PREFIX;
@@ -261,9 +267,14 @@ public class CloudObjectsSelectorCommon {
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
-        reader = reader.schema(AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema));
+        StructType rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema);
+        if (getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
+          addAliasesToRowSchema(sourceSchema, rowSchema);
+        }
+        reader = reader.schema(rowSchema);
       }
     }
+
     if (StringUtils.isNullOrEmpty(datasourceOpts)) {
       // fall back to legacy config for BWC. TODO consolidate in HUDI-6020
       datasourceOpts = getStringWithAltKeys(properties, S3EventsHoodieIncrSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
@@ -292,6 +303,11 @@ public class CloudObjectsSelectorCommon {
       dataset = reader.load(paths.toArray(new String[cloudObjectMetadata.size()]));
     }
 
+    if (schemaProviderOption.isPresent() && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
+      Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
+      dropAliasesWithCoalesce(dataset, sourceSchema);
+    }
+
     // add partition column from source path if configured
     if (containsConfigProperty(properties, PATH_BASED_PARTITION_FIELDS)) {
       String[] partitionKeysToAdd = getStringWithAltKeys(properties, PATH_BASED_PARTITION_FIELDS).split(",");
@@ -304,6 +320,53 @@ public class CloudObjectsSelectorCommon {
     }
     dataset = coalesceOrRepartition(dataset, numPartitions);
     return Option.of(dataset);
+  }
+
+  private void addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
+    List<StructField> aliasFields = getAliasStructTypes(avroSchema, rowSchema);
+    for (StructField aliasField : aliasFields) {
+      rowSchema = rowSchema.add(aliasField);
+    }
+  }
+
+  private void dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
+    for (Schema.Field field : sourceSchema.getFields()) {
+      if (!field.aliases().isEmpty()) {
+        dataset = getDatasetWithCoalescedFields(dataset, field.name(), field.aliases());
+      }
+    }
+  }
+
+  private Dataset<Row> getDatasetWithCoalescedFields(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
+    List<Column> columns = new ArrayList<>();
+    columns.add(functions.lit(0));
+    columns.add(dataset.col(fieldName));
+    aliases.forEach(alias -> columns.add(dataset.col(alias)));
+    Dataset<Row> coalescedDataset = dataset.withColumn(fieldName, functions.coalesce(columns.toArray(new Column[0])));
+    for (String alias : aliases) {
+      coalescedDataset = coalescedDataset.drop(alias);
+    }
+    return coalescedDataset;
+  }
+
+  private static List<StructField> getAliasStructTypes(Schema avroSchema, StructType rowSchema) {
+    List<StructField> aliasFields = new ArrayList<>();
+    for (Schema.Field avroField : avroSchema.getFields()) {
+      String avroFieldName = avroField.name();
+      if (avroField.aliases().isEmpty()) {
+        continue;
+      }
+
+      for (StructField rowField : rowSchema.fields()) {
+        if (rowField.name().equals(avroFieldName)) {
+          for (String alias : avroField.aliases()) {
+            aliasFields.add(new StructField(alias, rowField.dataType(), true, rowField.metadata()));
+          }
+        }
+      }
+    }
+
+    return aliasFields;
   }
 
   private static Option<String> getPropVal(TypedProperties props, ConfigProperty<String> configProperty) {
