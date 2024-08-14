@@ -269,7 +269,7 @@ public class CloudObjectsSelectorCommon {
       if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
         StructType rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema);
         if (getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
-          addAliasesToRowSchema(sourceSchema, rowSchema);
+          rowSchema = addAliasesToRowSchema(sourceSchema, rowSchema);
         }
         reader = reader.schema(rowSchema);
       }
@@ -305,9 +305,9 @@ public class CloudObjectsSelectorCommon {
 
     if (schemaProviderOption.isPresent() && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
-      dropAliasesWithCoalesce(dataset, sourceSchema);
+      dataset = dropAliasesWithCoalesce(dataset, sourceSchema);
     }
-
+    
     // add partition column from source path if configured
     if (containsConfigProperty(properties, PATH_BASED_PARTITION_FIELDS)) {
       String[] partitionKeysToAdd = getStringWithAltKeys(properties, PATH_BASED_PARTITION_FIELDS).split(",");
@@ -322,24 +322,25 @@ public class CloudObjectsSelectorCommon {
     return Option.of(dataset);
   }
 
-  private void addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
+  private StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
     List<StructField> aliasFields = getAliasStructTypes(avroSchema, rowSchema);
     for (StructField aliasField : aliasFields) {
       rowSchema = rowSchema.add(aliasField);
     }
+    return rowSchema;
   }
 
-  private void dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
+  private Dataset<Row> dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
     for (Schema.Field field : sourceSchema.getFields()) {
       if (!field.aliases().isEmpty()) {
         dataset = getDatasetWithCoalescedFields(dataset, field.name(), field.aliases());
       }
     }
+    return dataset;
   }
 
   private Dataset<Row> getDatasetWithCoalescedFields(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
     List<Column> columns = new ArrayList<>();
-    columns.add(functions.lit(0));
     columns.add(dataset.col(fieldName));
     aliases.forEach(alias -> columns.add(dataset.col(alias)));
     Dataset<Row> coalescedDataset = dataset.withColumn(fieldName, functions.coalesce(columns.toArray(new Column[0])));
