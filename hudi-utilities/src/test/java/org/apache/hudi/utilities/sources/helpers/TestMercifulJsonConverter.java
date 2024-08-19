@@ -18,6 +18,7 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.testutils.SchemaTestUtil;
 
 import com.fasterxml.jackson.core.JsonProcessingException;

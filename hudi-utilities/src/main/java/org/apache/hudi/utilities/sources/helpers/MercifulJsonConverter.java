@@ -16,8 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.avro;
+package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hudi.avro.AvroLogicalTypeEnum;
+import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
