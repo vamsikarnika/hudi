@@ -196,7 +196,9 @@ public class HDFSParquetImporterUtils implements Serializable {
         // To reduce large number of tasks.
         .coalesce(16 * this.parallelism).map(entry -> {
           GenericRecord genericRecord = ((Tuple2<Void, GenericRecord>) entry)._2();
-          genericRecord = replaceEnumFields(genericRecord);
+          // reading parquet files as avro records is treating enums as strings, which is causing
+          // issue with preparing avro payload
+          genericRecord = replaceEnumsInRecord(genericRecord);
           Object partitionField = genericRecord.get(this.partitionKey);
           if (partitionField == null) {
             throw new HoodieIOException("partition key is missing. :" + this.partitionKey);
@@ -220,66 +222,50 @@ public class HDFSParquetImporterUtils implements Serializable {
         });
   }
 
-  private GenericRecord replaceEnumFields(GenericRecord record) {
-    // Get the schema from the record
+  public GenericRecord replaceEnumsInRecord(GenericRecord record) {
     Schema schema = record.getSchema();
-
-    // Create a new record with the same schema
     GenericRecord newRecord = new GenericData.Record(schema);
 
-    // Iterate over each field in the schema
     for (Schema.Field field : schema.getFields()) {
       Object value = record.get(field.name());
       Schema fieldSchema = field.schema();
-
-      if (fieldSchema.getType() == Schema.Type.ENUM) {
-        // Replace string value with its enum representation
-        if (value != null) {
-          String enumValue = value.toString(); // Convert enum to its string representation
-          newRecord.put(field.name(), new GenericData.EnumSymbol(fieldSchema, enumValue));
-        } else {
-          newRecord.put(field.name(), null);
-        }
-      } else if (fieldSchema.getType() == Schema.Type.RECORD) {
-        // Handle nested records recursively
-        newRecord.put(field.name(), replaceEnumFields((GenericRecord) value));
-      } else if (fieldSchema.getType() == Schema.Type.MAP) {
-        // Handle map fields
-        Map<String, Object> map = (Map<String, Object>) value;
-        Map<String, Object> newMap = new java.util.HashMap<>();
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-          Object mapValue = entry.getValue();
-          if (fieldSchema.getValueType().getType() == Schema.Type.ENUM && mapValue != null) {
-            String enumValue = mapValue.toString();
-            newMap.put(entry.getKey(), new GenericData.EnumSymbol(fieldSchema.getValueType(), enumValue));
-          } else if (fieldSchema.getValueType().getType() == Schema.Type.RECORD) {
-            newMap.put(entry.getKey(), replaceEnumFields((GenericRecord) mapValue));
-          } else {
-            newMap.put(entry.getKey(), mapValue);
-          }
-        }
-        newRecord.put(field.name(), newMap);
-      } else if (fieldSchema.getType() == Schema.Type.ARRAY) {
-        // Handle array fields
-        GenericData.Array<?> array = (GenericData.Array<?>) value;
-        GenericData.Array<Object> newArray = new GenericData.Array<>(array.size(), array.getSchema());
-        for (Object item : array) {
-          if (fieldSchema.getElementType().getType() == Schema.Type.ENUM && item != null) {
-            newArray.add(new GenericData.EnumSymbol(fieldSchema.getElementType(), item.toString()));
-          } else if (fieldSchema.getElementType().getType() == Schema.Type.RECORD) {
-            newArray.add(replaceEnumFields((GenericRecord) item));
-          } else {
-            newArray.add(item);
-          }
-        }
-        newRecord.put(field.name(), newArray);
-      } else {
-        // For other field types, just copy the value
-        newRecord.put(field.name(), value);
-      }
+      newRecord.put(field.name(), processField(value, fieldSchema));
     }
 
     return newRecord;
+  }
+
+  private Object processField(Object value, Schema fieldSchema) {
+    switch (fieldSchema.getType()) {
+      case ENUM:
+        return value != null ? new GenericData.EnumSymbol(fieldSchema, value.toString()) : null;
+      case RECORD:
+        return value != null ? replaceEnumsInRecord((GenericRecord) value) : null;
+      case MAP:
+        return processMapField((Map<String, Object>) value, fieldSchema);
+      case ARRAY:
+        return processArrayField((GenericData.Array<?>) value, fieldSchema);
+      default:
+        return value;
+    }
+  }
+
+  private Map<String, Object> processMapField(Map<String, Object> map, Schema fieldSchema) {
+    Map<String, Object> newMap = new java.util.HashMap<>();
+    for (Map.Entry<String, Object> entry : map.entrySet()) {
+      Object mapValue = entry.getValue();
+      Schema valueType = fieldSchema.getValueType();
+      newMap.put(entry.getKey(), processField(mapValue, valueType));
+    }
+    return newMap;
+  }
+
+  private GenericData.Array<Object> processArrayField(GenericData.Array<?> array, Schema fieldSchema) {
+    GenericData.Array<Object> newArray = new GenericData.Array<>(array.size(), array.getSchema());
+    for (Object item : array) {
+      newArray.add(processField(item, fieldSchema.getElementType()));
+    }
+    return newArray;
   }
 
   /**
