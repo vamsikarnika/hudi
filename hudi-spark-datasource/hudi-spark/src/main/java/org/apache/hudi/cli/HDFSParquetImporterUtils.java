@@ -196,8 +196,8 @@ public class HDFSParquetImporterUtils implements Serializable {
         // To reduce large number of tasks.
         .coalesce(16 * this.parallelism).map(entry -> {
           GenericRecord genericRecord = ((Tuple2<Void, GenericRecord>) entry)._2();
-          // reading parquet files as avro records is treating enums as strings, which is causing
-          // issue with preparing avro payload
+          // Enum fields in Avro records are being read as strings when loaded from Parquet files,
+          // leading to issues when constructing the Avro payload.
           genericRecord = replaceEnumsInRecord(genericRecord);
           Object partitionField = genericRecord.get(this.partitionKey);
           if (partitionField == null) {
@@ -222,12 +222,12 @@ public class HDFSParquetImporterUtils implements Serializable {
         });
   }
 
-  public GenericRecord replaceEnumsInRecord(GenericRecord record) {
-    Schema schema = record.getSchema();
+  public static GenericRecord replaceEnumsInRecord(GenericRecord genericRecord) {
+    Schema schema = genericRecord.getSchema();
     GenericRecord newRecord = new GenericData.Record(schema);
 
     for (Schema.Field field : schema.getFields()) {
-      Object value = record.get(field.name());
+      Object value = genericRecord.get(field.name());
       Schema fieldSchema = field.schema();
       newRecord.put(field.name(), processField(value, fieldSchema));
     }
@@ -235,7 +235,7 @@ public class HDFSParquetImporterUtils implements Serializable {
     return newRecord;
   }
 
-  private Object processField(Object value, Schema fieldSchema) {
+  private static Object processField(Object value, Schema fieldSchema) {
     switch (fieldSchema.getType()) {
       case ENUM:
         return value != null ? new GenericData.EnumSymbol(fieldSchema, value.toString()) : null;
@@ -250,7 +250,7 @@ public class HDFSParquetImporterUtils implements Serializable {
     }
   }
 
-  private Map<String, Object> processMapField(Map<String, Object> map, Schema fieldSchema) {
+  private static Map<String, Object> processMapField(Map<String, Object> map, Schema fieldSchema) {
     Map<String, Object> newMap = new java.util.HashMap<>();
     for (Map.Entry<String, Object> entry : map.entrySet()) {
       Object mapValue = entry.getValue();
@@ -260,7 +260,7 @@ public class HDFSParquetImporterUtils implements Serializable {
     return newMap;
   }
 
-  private GenericData.Array<Object> processArrayField(GenericData.Array<?> array, Schema fieldSchema) {
+  private static GenericData.Array<Object> processArrayField(GenericData.Array<?> array, Schema fieldSchema) {
     GenericData.Array<Object> newArray = new GenericData.Array<>(array.size(), array.getSchema());
     for (Object item : array) {
       newArray.add(processField(item, fieldSchema.getElementType()));
