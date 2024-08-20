@@ -98,6 +98,24 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
   }
 
   @Test
+  public void loadDatasetWithSchemaAndAliasFields() {
+    TypedProperties props = new TypedProperties();
+    TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc");
+    String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc").getPath();
+    props.put("hoodie.deltastreamer.schemaprovider.source.schema.file", schemaFilePath);
+    props.put("hoodie.deltastreamer.schema.provider.class.name", FilebasedSchemaProvider.class.getName());
+    props.put("hoodie.deltastreamer.source.cloud.data.partition.fields.from.path", "country,state");
+    props.put("hoodie.streamer.source.cloud.data.reader.coalesce.aliases", "true");
+    CloudObjectsSelectorCommon cloudObjectsSelectorCommon = new CloudObjectsSelectorCommon(props);
+    List<CloudObjectMetadata> input = Collections.singletonList(new CloudObjectMetadata("src/test/resources/data/partitioned/country=US/state=TX/old_data.json", 1));
+    Option<Dataset<Row>> result = cloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, "json", Option.of(new FilebasedSchemaProvider(props, jsc)), 1);
+    Assertions.assertTrue(result.isPresent());
+    Assertions.assertEquals(1, result.get().count());
+    Row expected = RowFactory.create("some data", "US", "TX");
+    Assertions.assertEquals(Collections.singletonList(expected), result.get().collectAsList());
+  }
+
+  @Test
   public void loadDatasetWithSchemaAndRepartition() {
     TypedProperties props = new TypedProperties();
     TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc");
@@ -140,6 +158,32 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     Option<Dataset<Row>> result = cloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, "json", Option.of(new FilebasedSchemaProvider(props, jsc)), 30);
     Assertions.assertTrue(result.isPresent());
     List<Row> expected = Arrays.asList(RowFactory.create("some data", "US", "CA"), RowFactory.create("some data", "US", "TX"), RowFactory.create("some data", "IND", "TS"));
+    List<Row> actual = result.get().collectAsList();
+    Assertions.assertEquals(new HashSet<>(expected), new HashSet<>(actual));
+  }
+
+  @Test
+  public void loadDatasetWithNestedSchemaAndCoalesceAliases() {
+    TypedProperties props = new TypedProperties();
+    TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc");
+    String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc").getPath();
+    props.put("hoodie.deltastreamer.schemaprovider.source.schema.file", schemaFilePath);
+    props.put("hoodie.deltastreamer.schema.provider.class.name", FilebasedSchemaProvider.class.getName());
+    // Setting this config so that dataset repartition happens inside `loadAsDataset`
+    props.put("hoodie.streamer.source.cloud.data.partition.max.size", "1");
+    props.put("hoodie.streamer.source.cloud.data.reader.coalesce.aliases", "true");
+    List<CloudObjectMetadata> input = Arrays.asList(
+        new CloudObjectMetadata("src/test/resources/data/nested_data_1.json", 1000),
+        new CloudObjectMetadata("src/test/resources/data/nested_data_2.json", 1000)
+    );
+    CloudObjectsSelectorCommon cloudObjectsSelectorCommon = new CloudObjectsSelectorCommon(props);
+    Option<Dataset<Row>> result = cloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, "json", Option.of(new FilebasedSchemaProvider(props, jsc)), 30);
+    Assertions.assertTrue(result.isPresent());
+    Row address1 = RowFactory.create("123 Main St", "Springfield", "12345");
+    Row person1 = RowFactory.create("John", "Doe", address1);
+    Row address2 = RowFactory.create("456 Elm St", "Shelbyville", "67890");
+    Row person2 = RowFactory.create("Jane", "Smith", address2);
+    List<Row> expected = Arrays.asList(person1, person2);
     List<Row> actual = result.get().collectAsList();
     Assertions.assertEquals(new HashSet<>(expected), new HashSet<>(actual));
   }
