@@ -38,7 +38,7 @@ import java.util.Map;
 /**
  * Converts Json record to Avro Generic Record.
  */
-public class JsonToAvroConverter {
+public class JsonToAvroConverterTestUtil {
 
   private static final Map<Schema.Type, JsonToAvroFieldProcessor> FIELD_TYPE_PROCESSORS = getFieldTypeProcessors();
 

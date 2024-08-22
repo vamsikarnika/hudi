@@ -204,7 +204,7 @@ public class RawTripTestPayload implements HoodieRecordPayload<RawTripTestPayloa
     if (isDeleted) {
       return Option.empty();
     } else {
-      JsonToAvroConverter jsonConverter = new JsonToAvroConverter();
+      JsonToAvroConverterTestUtil jsonConverter = new JsonToAvroConverterTestUtil();
       return Option.of(jsonConverter.convert(getJsonData(), schema));
     }
   }
@@ -215,7 +215,7 @@ public class RawTripTestPayload implements HoodieRecordPayload<RawTripTestPayloa
   }
 
   public IndexedRecord getRecordToInsert(Schema schema) throws IOException {
-    JsonToAvroConverter jsonConverter = new JsonToAvroConverter();
+    JsonToAvroConverterTestUtil jsonConverter = new JsonToAvroConverterTestUtil();
     return jsonConverter.convert(getJsonData(), schema);
   }
 
