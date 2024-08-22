@@ -267,14 +267,17 @@ public class CloudObjectsSelectorCommon {
     }
     DataFrameReader reader = spark.read().format(fileFormat);
     String datasourceOpts = getStringWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
+
+    StructType rowSchema = null;
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
-        StructType rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema);
+        rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema);
         if (getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
-          rowSchema = addAliasesToRowSchema(sourceSchema, rowSchema);
+          reader.schema(addAliasesToRowSchema(sourceSchema, rowSchema));
+        } else {
+          reader = reader.schema(rowSchema);
         }
-        reader = reader.schema(rowSchema);
       }
     }
 
@@ -306,9 +309,11 @@ public class CloudObjectsSelectorCommon {
       dataset = reader.load(paths.toArray(new String[cloudObjectMetadata.size()]));
     }
 
-    if (schemaProviderOption.isPresent() && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
+    if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
-      dataset = dropAliasesWithCoalesce(dataset, sourceSchema);
+      if (rowSchema != null && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
+        dataset = spark.createDataFrame(dropAliasesWithCoalesce(dataset, sourceSchema).rdd(), rowSchema);
+      }
     }
 
     // add partition column from source path if configured
@@ -326,10 +331,24 @@ public class CloudObjectsSelectorCommon {
   }
 
   private StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
-    List<StructField> aliasFields = extractAliasFields(avroSchema, rowSchema);
-    StructField[] existingFields = rowSchema.fields();
+    Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
+        .collect(Collectors.toMap(StructField::name, Function.identity()));
+    List<StructField> aliasFields = extractAliasFields(avroSchema, rowFieldsMap);
+
+    StructField[] modifiedFields = avroSchema.getFields().stream()
+        .map(avroField -> {
+          StructField rowField = rowFieldsMap.get(avroField.name());
+
+          if (avroField.aliases().isEmpty() || rowField.nullable()) {
+            return rowField;
+          } else {
+            // if avro field contains aliases amd nullable set to false, replace field with nullable set to true
+            return new StructField(rowField.name(), rowField.dataType(), true, rowField.metadata());
+          }
+        })
+        .toArray(StructField[]::new);
     return new StructType(Stream.concat(
-        Arrays.stream(existingFields),
+        Arrays.stream(modifiedFields),
         aliasFields.stream()
     ).toArray(StructField[]::new));
   }
@@ -352,10 +371,8 @@ public class CloudObjectsSelectorCommon {
     return coalescedDataset.drop(aliases.toArray(new String[0]));
   }
 
-  private static List<StructField> extractAliasFields(Schema avroSchema, StructType rowSchema) {
+  private static List<StructField> extractAliasFields(Schema avroSchema, Map<String, StructField> rowFieldsMap) {
     List<StructField> aliasFields = new ArrayList<>();
-    Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
-        .collect(Collectors.toMap(StructField::name, Function.identity()));
 
     for (Schema.Field avroField : avroSchema.getFields()) {
       String avroFieldName = avroField.name();

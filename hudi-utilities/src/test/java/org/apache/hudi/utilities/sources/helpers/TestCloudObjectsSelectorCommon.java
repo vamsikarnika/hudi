@@ -18,19 +18,24 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.testutils.HoodieSparkClientTestHarness;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 
+import org.apache.avro.Schema;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -163,7 +168,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
   }
 
   @Test
-  public void loadDatasetWithNestedSchemaAndCoalesceAliases() {
+  public void loadDatasetWithNestedSchemaAndCoalesceAliases() throws IOException {
     TypedProperties props = new TypedProperties();
     TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc");
     String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc").getPath();
@@ -186,6 +191,9 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     List<Row> expected = Arrays.asList(person1, person2);
     List<Row> actual = result.get().collectAsList();
     Assertions.assertEquals(new HashSet<>(expected), new HashSet<>(actual));
+    Schema schema = new Schema.Parser().parse(new File(schemaFilePath));
+    StructType expectedSchema = AvroConversionUtils.convertAvroSchemaToStructType(schema);
+    Assertions.assertEquals(expectedSchema, result.get().schema(), "output dataset schema should match source schema");
   }
 
   @Test
