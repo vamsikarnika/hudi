@@ -330,7 +330,7 @@ public class CloudObjectsSelectorCommon {
     return Option.of(dataset);
   }
 
-  private StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
+  public static StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
     Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
         .collect(Collectors.toMap(StructField::name, Function.identity()));
     List<StructField> aliasFields = extractAliasFields(avroSchema, rowFieldsMap);
@@ -353,14 +353,14 @@ public class CloudObjectsSelectorCommon {
     ).toArray(StructField[]::new));
   }
 
-  private Dataset<Row> dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
+  public static Dataset<Row> dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
     // Process all fields with aliases and coalesce them in the dataset
     return sourceSchema.getFields().stream()
         .filter(field -> !field.aliases().isEmpty())
         .reduce(dataset, (ds, field) -> coalesceFieldAliases(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
   }
 
-  private Dataset<Row> coalesceFieldAliases(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
+  private static Dataset<Row> coalesceFieldAliases(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
     // Build a list of columns to coalesce
     List<Column> columns = new ArrayList<>();
     columns.add(dataset.col(fieldName));
