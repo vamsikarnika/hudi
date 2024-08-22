@@ -161,5 +161,5 @@ public class CloudSourceConfig extends HoodieConfig {
       .defaultValue(false)
       .markAdvanced()
       .sinceVersion("0.14.1")
-      .withDocumentation("Boolean value to include alias columns while reading from source");
+      .withDocumentation("Boolean value to allow coalesce alias columns with actual columns while reading from source");
 }

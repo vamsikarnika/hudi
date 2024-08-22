@@ -193,6 +193,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     Assertions.assertEquals(new HashSet<>(expected), new HashSet<>(actual));
     Schema schema = new Schema.Parser().parse(new File(schemaFilePath));
     StructType expectedSchema = AvroConversionUtils.convertAvroSchemaToStructType(schema);
+    // assert final output schema matches with the source schema
     Assertions.assertEquals(expectedSchema, result.get().schema(), "output dataset schema should match source schema");
   }
 
