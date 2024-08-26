@@ -18,6 +18,7 @@
 
 package org.apache.hudi.common;
 
+import org.apache.hudi.avro.MercifulJsonConverter;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 import org.apache.hudi.common.util.FileIOUtils;
 import org.apache.hudi.common.util.Option;
@@ -26,13 +27,7 @@ import org.apache.hudi.exception.HoodieException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericDatumReader;
-import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
-import org.apache.avro.io.DatumReader;
-import org.apache.avro.io.Decoder;
-import org.apache.avro.io.DecoderFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -66,12 +61,8 @@ public class HoodieJsonPayload implements HoodieRecordPayload<HoodieJsonPayload>
 
   @Override
   public Option<IndexedRecord> getInsertValue(Schema schema) throws IOException {
-    DecoderFactory decoderFactory = new DecoderFactory();
-    Decoder decoder = decoderFactory.jsonDecoder(schema, getJsonData());
-    DatumReader<GenericData.Record> reader =
-        new GenericDatumReader<>(schema);
-    GenericRecord genericRecord = reader.read(null, decoder);
-    return Option.of(genericRecord);
+    MercifulJsonConverter jsonConverter = new MercifulJsonConverter();
+    return Option.of(jsonConverter.convert(getJsonData(), schema));
   }
 
   private String getJsonData() throws IOException {

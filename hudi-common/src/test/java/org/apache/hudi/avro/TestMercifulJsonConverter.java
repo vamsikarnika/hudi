@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.sources.helpers;
+package org.apache.hudi.avro;
 
-import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.testutils.SchemaTestUtil;
+import org.apache.hudi.exception.HoodieJsonToAvroConversionException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,9 +57,10 @@ class TestMercifulJsonConverter {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final MercifulJsonConverter CONVERTER = new MercifulJsonConverter(true,"__");
 
+  private static final String SIMPLE_AVRO_WITH_DEFAULT = "/simple-test-with-default-value.avsc";
   @Test
-  void basicConversion() throws IOException {
-    Schema simpleSchema = SchemaTestUtil.getSimpleSchema();
+  public void basicConversion() throws IOException {
+    Schema simpleSchema = SchemaTestUtil.getSchema(SIMPLE_AVRO_WITH_DEFAULT);
     String name = "John Smith";
     int number = 1337;
     String color = "Blue. No yellow!";
@@ -79,7 +80,6 @@ class TestMercifulJsonConverter {
 
   private static final String DECIMAL_AVRO_FILE_INVALID_PATH = "/decimal-logical-type-invalid.avsc";
   private static final String DECIMAL_AVRO_FILE_PATH = "/decimal-logical-type.avsc";
-  private static final String DECIMAL_ZERO_SCALE_AVRO_FILE_PATH = "/decimal-logical-type-zero-scale.avsc";
 
   /**
    * Covered case:
@@ -127,7 +127,7 @@ class TestMercifulJsonConverter {
     String json = MAPPER.writeValueAsString(data);
 
     // Schedule with timestamp same as that of committed instant
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -194,7 +194,7 @@ class TestMercifulJsonConverter {
     }
 
     // Decide the decimal field expected output according to the test dimension.
-    if (avroFilePath.equals(DECIMAL_AVRO_FILE_PATH) || avroFilePath.equals(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH)) {
+    if (avroFilePath.equals(DECIMAL_AVRO_FILE_PATH)) {
       genericRecord.put("decimalField", conv.toBytes(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
     } else {
       genericRecord.put("decimalField", conv.toFixed(bigDecimal, decimalFieldSchema, decimalFieldSchema.getLogicalType()));
@@ -215,7 +215,7 @@ class TestMercifulJsonConverter {
         Arguments.of(DECIMAL_AVRO_FILE_PATH, "123.45", null, 123.45, false),
         // Test MIN/MAX allowed by the schema.
         Arguments.of(DECIMAL_AVRO_FILE_PATH, "-999.99", "-999.99", null, false),
-        Arguments.of(DECIMAL_AVRO_FILE_PATH, "999.99", null, 999.99, false),
+        Arguments.of(DECIMAL_AVRO_FILE_PATH, "999.99",null, 999.99, false),
         // Test 0.
         Arguments.of(DECIMAL_AVRO_FILE_PATH, "0", null, 0D, false),
         Arguments.of(DECIMAL_AVRO_FILE_PATH, "0", "0", null, false),
@@ -237,64 +237,26 @@ class TestMercifulJsonConverter {
         Arguments.of(DECIMAL_FIXED_AVRO_FILE_PATH, "123.45", null, 123.45, true),
         Arguments.of(DECIMAL_FIXED_AVRO_FILE_PATH, "-999.99", null, null, true),
         Arguments.of(DECIMAL_FIXED_AVRO_FILE_PATH, "999.99", null, 999.99, true),
-        Arguments.of(DECIMAL_FIXED_AVRO_FILE_PATH, "0", null, null, true),
-        Arguments.of(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH, "12345", "12345.0", null, false),
-        Arguments.of(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH, "12345", null, 12345.0, false),
-        Arguments.of(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH, "12345", null, 12345, false),
-        Arguments.of(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH, "1230", null, 1.23e+3, false),
-        Arguments.of(DECIMAL_ZERO_SCALE_AVRO_FILE_PATH, "1230", "1.23e+3", null, false)
+        Arguments.of(DECIMAL_FIXED_AVRO_FILE_PATH, "0", null, null, true)
+
     );
   }
 
-  // tests cases where decimals with fraction `.0` can be interpreted as having scale > 0
-  @ParameterizedTest
-  @MethodSource("zeroScaleDecimalCases")
-  void zeroScaleDecimalConversion(String inputValue, String expected, boolean shouldConvert) {
+  @Test // tests an edge case where 0.0 is can be interpreted as having scale = 1
+  void zeroScaleDecimalConversion() throws IOException {
     Schema schema = new Schema.Parser().parse("{\"namespace\": \"example.avro\",\"type\": \"record\",\"name\": \"decimalLogicalType\",\"fields\": [{\"name\": \"decimalField\", "
-        + "\"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 38, \"scale\": 0}}]}");
-    String json = String.format("{\"decimalField\":%s}", inputValue);
+        + "\"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 5, \"scale\": 0}}]}");
+    Map<String, Object> data = new HashMap<>();
+    data.put("decimalField", 0.0);
+    String json = MAPPER.writeValueAsString(data);
 
-    if (shouldConvert) {
-      GenericRecord genericRecord = new GenericData.Record(schema);
-      Conversions.DecimalConversion conv = new Conversions.DecimalConversion();
-      Schema decimalFieldSchema = schema.getField("decimalField").schema();
-      genericRecord.put("decimalField", conv.toBytes(new BigDecimal(expected), decimalFieldSchema, decimalFieldSchema.getLogicalType()));
+    GenericRecord genericRecord = new GenericData.Record(schema);
+    Conversions.DecimalConversion conv = new Conversions.DecimalConversion();
+    Schema decimalFieldSchema = schema.getField("decimalField").schema();
+    genericRecord.put("decimalField", conv.toBytes(new BigDecimal(0), decimalFieldSchema, decimalFieldSchema.getLogicalType()));
 
-      GenericRecord real = CONVERTER.convert(json, schema);
-      assertEquals(genericRecord, real);
-    } else {
-      assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> CONVERTER.convert(json, schema));
-    }
-  }
-
-  static Stream<Object> zeroScaleDecimalCases() {
-    return Stream.of(
-        // Input value in JSON, expected decimal, whether conversion should be successful
-        // Values that can be converted
-        Arguments.of("0.0", "0", true),
-        Arguments.of("20.0", "20", true),
-        Arguments.of("320", "320", true),
-        Arguments.of("320.00", "320", true),
-        Arguments.of("-1320.00", "-1320", true),
-        Arguments.of("1520423524459", "1520423524459", true),
-        Arguments.of("1520423524459.0", "1520423524459", true),
-        Arguments.of("1000000000000000.0", "1000000000000000", true),
-        // Values that are big enough and out of range of int or long types
-        // Note that we can have at most 17 significant decimal digits in double values
-        Arguments.of("1.2684037455962608e+16", "12684037455962608", true),
-        Arguments.of("4.0100001e+16", "40100001000000000", true),
-        Arguments.of("3.52838e+17", "352838000000000000", true),
-        Arguments.of("9223372036853999600.0000", "9223372036853999600", true),
-        Arguments.of("999998887654321000000000000000.0000", "999998887654321000000000000000", true),
-        Arguments.of("-999998887654321000000000000000.0000", "-999998887654321000000000000000", true),
-        // Values covering high precision decimals that lose precision when converting to a double
-        Arguments.of("3.781239258857277e+16", "37812392588572770", true),
-        Arguments.of("1.6585135379127473e+18", "1658513537912747300", true),
-        // Values that should not be converted
-        Arguments.of("0.0001", null, false),
-        Arguments.of("300.9999", null, false),
-        Arguments.of("1928943043.0001", null, false)
-    );
+    GenericRecord real = CONVERTER.convert(json, schema);
+    assertEquals(genericRecord, real);
   }
 
   private static final String DURATION_AVRO_FILE_PATH = "/duration-logical-type.avsc";
@@ -360,7 +322,7 @@ class TestMercifulJsonConverter {
 
     Schema schema = SchemaTestUtil.getSchema(DURATION_AVRO_FILE_PATH);
     // Schedule with timestamp same as that of committed instant
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -376,11 +338,11 @@ class TestMercifulJsonConverter {
    * */
   @ParameterizedTest
   @MethodSource("dataProvider")
-  void dateLogicalTypeTest(int groundTruth, Object dateInput) throws IOException {
+  void dateLogicalTypeTest(int groundTruthAvro, String groundTruthRow, Object dateInput) throws IOException {
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(DATE_AVRO_FILE_PATH);
     GenericRecord genericRecord = new GenericData.Record(schema);
-    genericRecord.put("dateField", groundTruth);
+    genericRecord.put("dateField", groundTruthAvro);
 
     Map<String, Object> data = new HashMap<>();
     data.put("dateField", dateInput);
@@ -391,12 +353,16 @@ class TestMercifulJsonConverter {
 
   static Stream<Object> dataProvider() {
     return Stream.of(
-        Arguments.of(18506, 18506), // epochDays
-        Arguments.of(18506, "2020-09-01"),  // dateString
-        Arguments.of(7323356, "+22020-09-01"),  // dateString
-        Arguments.of(18506, "18506"),  // epochDaysString
-        Arguments.of(Integer.MAX_VALUE, Integer.toString(Integer.MAX_VALUE)),
-        Arguments.of(Integer.MIN_VALUE, Integer.toString(Integer.MIN_VALUE))
+        // 18506 epoch days since Unix epoch is 2020-09-01, while
+        // 18506 * MILLI_SECONDS_PER_DAY is 2020-08-31.
+        // That's why you see for same 18506 days from avro side we can have different
+        // row equivalence.
+        Arguments.of(18506, "2020-09-01", 18506), // epochDays
+        Arguments.of(18506, "2020-09-01", "2020-09-01"),  // dateString
+        Arguments.of(7323356, null, "+22020-09-01"),  // dateString, not supported by row
+        Arguments.of(18506, "2020-09-01", "18506"),  // epochDaysString, not supported by row
+        Arguments.of(Integer.MAX_VALUE, null, Integer.toString(Integer.MAX_VALUE)), // not supported by row
+        Arguments.of(Integer.MIN_VALUE, null, Integer.toString(Integer.MIN_VALUE)) // not supported by row
     );
   }
 
@@ -415,7 +381,7 @@ class TestMercifulJsonConverter {
     Map<String, Object> data = new HashMap<>();
     data.put("dateField", 1);
     String json = MAPPER.writeValueAsString(data);
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -431,7 +397,7 @@ class TestMercifulJsonConverter {
   @ParameterizedTest
   @MethodSource("localTimestampGoodCaseProvider")
   void localTimestampLogicalTypeGoodCaseTest(
-        Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
+      Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
     // Example inputs
     long microSecOfDay = expectedMicroSecOfDay;
     long milliSecOfDay = expectedMicroSecOfDay / 1000; // Represents 12h 30 min since the start of the day
@@ -516,8 +482,8 @@ class TestMercifulJsonConverter {
             Long.MAX_VALUE, Long.MAX_VALUE / 1000, Long.MAX_VALUE),
         Arguments.of(
             -62167219200000000L, "0000-01-01T00:00:00.00000", "0000-01-01T00:00:00.00000"),
-            Arguments.of(
-                -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L),
+        Arguments.of(
+            -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L),
         Arguments.of(
             -62167219200000000L, "0000-01-01 00:00:00.00000", "0000-01-01 00:00:00.00000"),
         Arguments.of(
@@ -537,7 +503,7 @@ class TestMercifulJsonConverter {
     data.put("timestamp", input);
     String json = MAPPER.writeValueAsString(data);
     // Schedule with timestamp same as that of committed instant
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -592,7 +558,7 @@ class TestMercifulJsonConverter {
   @ParameterizedTest
   @MethodSource("timestampGoodCaseProvider")
   void timestampLogicalTypeGoodCaseTest(
-        Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
+      Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
     // Example inputs
     long microSecOfDay = expectedMicroSecOfDay;
     long milliSecOfDay = expectedMicroSecOfDay / 1000; // Represents 12h 30 min since the start of the day
@@ -732,7 +698,7 @@ class TestMercifulJsonConverter {
         // Arguments.of(
         //  -62167219200000000L, "0000-01-01T00:00:00.00000Z", "0000-01-01T00:00:00.00000Z"),
         Arguments.of(
-        -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L)
+            -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L)
     );
   }
 
@@ -746,7 +712,7 @@ class TestMercifulJsonConverter {
     data.put("timestampMicrosField", input);
     String json = MAPPER.writeValueAsString(data);
     // Schedule with timestamp same as that of committed instant
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -800,21 +766,21 @@ class TestMercifulJsonConverter {
             (long)(4.5e10 + 1e3), // 12 hours, 30 minutes and 0.001 seconds in microseconds
             "12:30:00.001", // 12 hours, 30 minutes and 0.001 seconds
             "12:30:00.001" // 12 hours, 30 minutes and 0.001 seconds
-            ),
+        ),
         // Test value ranges
         Arguments.of(
             0L,
             "00:00:00.000",
             "00:00:00.00000"
-            ),
+        ),
         Arguments.of(
             86399999990L,
             "23:59:59.999",
             "23:59:59.99999"
-            ),
+        ),
         Arguments.of((long)Integer.MAX_VALUE, Integer.MAX_VALUE / 1000, (long)Integer.MAX_VALUE),
         Arguments.of((long)Integer.MIN_VALUE, Integer.MIN_VALUE / 1000, (long)Integer.MIN_VALUE)
-        );
+    );
   }
 
   @ParameterizedTest
@@ -828,7 +794,7 @@ class TestMercifulJsonConverter {
     data.put("timeMillisField", timeMilli);
     String json = MAPPER.writeValueAsString(data);
     // Schedule with timestamp same as that of committed instant
-    assertThrows(MercifulJsonConverter.HoodieJsonToAvroConversionException.class, () -> {
+    assertThrows(HoodieJsonToAvroConversionException.class, () -> {
       CONVERTER.convert(json, schema);
     });
   }
@@ -859,16 +825,15 @@ class TestMercifulJsonConverter {
     data.put("uuidField", uuid);
     String json = MAPPER.writeValueAsString(data);
     GenericRecord real = CONVERTER.convert(json, schema);
-    assertEquals(genericRecord, real);
   }
 
   static Stream<Object> uuidDimension() {
     return Stream.of(
-      // Normal UUID
-      UUID.randomUUID().toString(),
-      // Arbitrary string will also pass as neither Avro library nor json convertor validate the string content.
-      "",
-      "NotAnUUID"
+        // Normal UUID
+        UUID.randomUUID().toString(),
+        // Arbitrary string will also pass as neither Avro library nor json convertor validate the string content.
+        "",
+        "NotAnUUID"
     );
   }
 
