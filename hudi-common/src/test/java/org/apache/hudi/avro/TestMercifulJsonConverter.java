@@ -431,7 +431,7 @@ public class TestMercifulJsonConverter {
   @ParameterizedTest
   @MethodSource("localTimestampGoodCaseProvider")
   void localTimestampLogicalTypeGoodCaseTest(
-      Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
+        Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
     // Example inputs
     long microSecOfDay = expectedMicroSecOfDay;
     long milliSecOfDay = expectedMicroSecOfDay / 1000; // Represents 12h 30 min since the start of the day
@@ -516,8 +516,8 @@ public class TestMercifulJsonConverter {
             Long.MAX_VALUE, Long.MAX_VALUE / 1000, Long.MAX_VALUE),
         Arguments.of(
             -62167219200000000L, "0000-01-01T00:00:00.00000", "0000-01-01T00:00:00.00000"),
-        Arguments.of(
-            -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L),
+            Arguments.of(
+                -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L),
         Arguments.of(
             -62167219200000000L, "0000-01-01 00:00:00.00000", "0000-01-01 00:00:00.00000"),
         Arguments.of(
@@ -592,7 +592,7 @@ public class TestMercifulJsonConverter {
   @ParameterizedTest
   @MethodSource("timestampGoodCaseProvider")
   void timestampLogicalTypeGoodCaseTest(
-      Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
+        Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
     // Example inputs
     long microSecOfDay = expectedMicroSecOfDay;
     long milliSecOfDay = expectedMicroSecOfDay / 1000; // Represents 12h 30 min since the start of the day
@@ -732,7 +732,7 @@ public class TestMercifulJsonConverter {
         // Arguments.of(
         //  -62167219200000000L, "0000-01-01T00:00:00.00000Z", "0000-01-01T00:00:00.00000Z"),
         Arguments.of(
-            -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L)
+        -62167219200000000L, -62167219200000000L / 1000, -62167219200000000L)
     );
   }
 
@@ -800,21 +800,21 @@ public class TestMercifulJsonConverter {
             (long)(4.5e10 + 1e3), // 12 hours, 30 minutes and 0.001 seconds in microseconds
             "12:30:00.001", // 12 hours, 30 minutes and 0.001 seconds
             "12:30:00.001" // 12 hours, 30 minutes and 0.001 seconds
-        ),
+            ),
         // Test value ranges
         Arguments.of(
             0L,
             "00:00:00.000",
             "00:00:00.00000"
-        ),
+            ),
         Arguments.of(
             86399999990L,
             "23:59:59.999",
             "23:59:59.99999"
-        ),
+            ),
         Arguments.of((long)Integer.MAX_VALUE, Integer.MAX_VALUE / 1000, (long)Integer.MAX_VALUE),
         Arguments.of((long)Integer.MIN_VALUE, Integer.MIN_VALUE / 1000, (long)Integer.MIN_VALUE)
-    );
+        );
   }
 
   @ParameterizedTest
@@ -864,11 +864,11 @@ public class TestMercifulJsonConverter {
 
   static Stream<Object> uuidDimension() {
     return Stream.of(
-        // Normal UUID
-        UUID.randomUUID().toString(),
-        // Arbitrary string will also pass as neither Avro library nor json convertor validate the string content.
-        "",
-        "NotAnUUID"
+      // Normal UUID
+      UUID.randomUUID().toString(),
+      // Arbitrary string will also pass as neither Avro library nor json convertor validate the string content.
+      "",
+      "NotAnUUID"
     );
   }
 
