@@ -105,9 +105,9 @@ public class MercifulJsonConverter {
   /**
    * Converts json to Avro generic record.
    * NOTE: if sanitization is needed for avro conversion, the schema input to this method is already sanitized.
-   * During the conversion here, we sanitize the fields in the data
+   *       During the conversion here, we sanitize the fields in the data
    *
-   * @param json   Json record
+   * @param json Json record
    * @param schema Schema
    */
   public GenericRecord convert(String json, Schema schema) {
@@ -115,7 +115,7 @@ public class MercifulJsonConverter {
       Map<String, Object> jsonObjectMap = mapper.readValue(json, Map.class);
       return convertJsonToAvro(jsonObjectMap, schema);
     } catch (HoodieException | JsonProcessingException e) {
-      throw new HoodieJsonToAvroConversionException(e.getMessage(), e);
+      throw new HoodieJsonToAvroConversionException("failed to convert json to avro", e);
     }
   }
 
@@ -138,7 +138,7 @@ public class MercifulJsonConverter {
     return avroRecord;
   }
 
-  protected Object getFieldFromJson(final Schema.Field fieldSchema, final Map<String, Object> inputJson, final String schemaFullName, final String invalidCharMask) {
+  protected static Object getFieldFromJson(final Schema.Field fieldSchema, final Map<String, Object> inputJson, final String schemaFullName, final String invalidCharMask) {
     Map<String, String> schemaToJsonFieldNames = SANITIZED_FIELD_MAPPINGS.computeIfAbsent(schemaFullName, unused -> new ConcurrentHashMap<>());
     if (!schemaToJsonFieldNames.containsKey(fieldSchema.name())) {
       // if we don't have field mapping, proactively populate as many as possible based on input json
