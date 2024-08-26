@@ -23,8 +23,6 @@ import org.apache.hudi.common.util.collection.Pair;
 
 import org.apache.avro.Schema;
 
-import java.time.LocalTime;
-
 /**
  * Processor for TimeMilli logical type.
  */
@@ -40,16 +38,10 @@ public class TimeMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor {
         new Parser.IntParser() {
           @Override
           public Pair<Boolean, Object> handleStringValue(String value) {
-            if (!isWellFormedDateTime(value)) {
-              return Pair.of(false, null);
-            }
-            Pair<Boolean, LocalTime> result = convertToLocalTime(value);
-            if (!result.getLeft()) {
-              return Pair.of(false, null);
-            }
-            LocalTime time = result.getRight();
-            Integer millisOfDay = time.toSecondOfDay() * 1000 + time.getNano() / 1000000;
-            return Pair.of(true, millisOfDay);
+            return convertDateTime(
+                value,
+                time -> time.toSecondOfDay() * 1000 + time.getNano() / 1000000,  // Millis of day
+                null);
           }
         },
         value, schema);

@@ -41,18 +41,10 @@ public class TimestampMilliLogicalTypeProcessor extends TimeLogicalTypeProcessor
         new Parser.LongParser() {
           @Override
           public Pair<Boolean, Object> handleStringValue(String value) {
-            if (!isWellFormedDateTime(value)) {
-              return Pair.of(false, null);
-            }
-            Pair<Boolean, Instant> result = convertToInstantTime(value);
-            if (!result.getLeft()) {
-              return Pair.of(false, null);
-            }
-            Instant time = result.getRight();
-
-            // Calculate the difference in milliseconds
-            long diffInMillis = Instant.EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit());
-            return Pair.of(true, diffInMillis);
+            return convertDateTime(
+                value,
+                null,
+                time -> Instant.EPOCH.until(time, ChronoField.MILLI_OF_SECOND.getBaseUnit()));  // Diff in millis
           }
         },
         value, schema);

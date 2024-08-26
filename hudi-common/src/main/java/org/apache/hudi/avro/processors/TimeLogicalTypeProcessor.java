@@ -37,6 +37,7 @@ import java.time.temporal.ChronoField;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
@@ -233,5 +234,33 @@ public abstract class TimeLogicalTypeProcessor extends JsonFieldProcessor {
       /* ignore */
     }
     return Pair.of(time != null, time);
+  }
+
+  protected Pair<Boolean, Object> convertDateTime(
+      String value,
+      Function<LocalTime, Object> localTimeFunction,
+      Function<Instant, Object> instantTimeFunction) {
+
+    if (!isWellFormedDateTime(value)) {
+      return Pair.of(false, null);
+    }
+
+    if (localTimeFunction != null) {
+      Pair<Boolean, LocalTime> result = convertToLocalTime(value);
+      if (!result.getLeft()) {
+        return Pair.of(false, null);
+      }
+      return Pair.of(true, localTimeFunction.apply(result.getRight()));
+    }
+
+    if (instantTimeFunction != null) {
+      Pair<Boolean, Instant> result = convertToInstantTime(value);
+      if (!result.getLeft()) {
+        return Pair.of(false, null);
+      }
+      return Pair.of(true, instantTimeFunction.apply(result.getRight()));
+    }
+
+    return Pair.of(false, null);  // Fallback in case of error
   }
 }

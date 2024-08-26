@@ -23,8 +23,6 @@ import org.apache.hudi.common.util.collection.Pair;
 
 import org.apache.avro.Schema;
 
-import java.time.LocalTime;
-
 /**
  * Processor for TimeMicro logical type.
  */
@@ -40,16 +38,10 @@ public class TimeMicroLogicalTypeProcessor extends TimeLogicalTypeProcessor {
         new Parser.LongParser() {
           @Override
           public Pair<Boolean, Object> handleStringValue(String value) {
-            if (!isWellFormedDateTime(value)) {
-              return Pair.of(false, null);
-            }
-            Pair<Boolean, LocalTime> result = convertToLocalTime(value);
-            if (!result.getLeft()) {
-              return Pair.of(false, null);
-            }
-            LocalTime time = result.getRight();
-            Long microsOfDay = (long) time.toSecondOfDay() * 1000000 + time.getNano() / 1000;
-            return Pair.of(true, microsOfDay);
+            return convertDateTime(
+                value,
+                time -> (long) time.toSecondOfDay() * 1000000 + time.getNano() / 1000,  // Micros of day
+                null);
           }
         },
         value, schema);
