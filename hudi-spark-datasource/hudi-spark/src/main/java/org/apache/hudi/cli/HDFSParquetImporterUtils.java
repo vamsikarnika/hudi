@@ -41,7 +41,6 @@ import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.index.HoodieIndex;
 
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -68,7 +67,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import scala.Tuple2;
@@ -196,9 +194,6 @@ public class HDFSParquetImporterUtils implements Serializable {
         // To reduce large number of tasks.
         .coalesce(16 * this.parallelism).map(entry -> {
           GenericRecord genericRecord = ((Tuple2<Void, GenericRecord>) entry)._2();
-          // Enum fields in Avro records are being read as strings when loaded from Parquet files,
-          // leading to issues when constructing the Avro payload.
-          genericRecord = replaceEnumsInRecord(genericRecord);
           Object partitionField = genericRecord.get(this.partitionKey);
           if (partitionField == null) {
             throw new HoodieIOException("partition key is missing. :" + this.partitionKey);
@@ -220,52 +215,6 @@ public class HDFSParquetImporterUtils implements Serializable {
           return new HoodieAvroRecord<>(new HoodieKey(rowField.toString(), partitionPath),
               new HoodieJsonPayload(genericRecord.toString()));
         });
-  }
-
-  public static GenericRecord replaceEnumsInRecord(GenericRecord genericRecord) {
-    Schema schema = genericRecord.getSchema();
-    GenericRecord newRecord = new GenericData.Record(schema);
-
-    for (Schema.Field field : schema.getFields()) {
-      Object value = genericRecord.get(field.name());
-      Schema fieldSchema = field.schema();
-      newRecord.put(field.name(), processField(value, fieldSchema));
-    }
-
-    return newRecord;
-  }
-
-  private static Object processField(Object value, Schema fieldSchema) {
-    switch (fieldSchema.getType()) {
-      case ENUM:
-        return value != null ? new GenericData.EnumSymbol(fieldSchema, value.toString()) : null;
-      case RECORD:
-        return value != null ? replaceEnumsInRecord((GenericRecord) value) : null;
-      case MAP:
-        return processMapField((Map<String, Object>) value, fieldSchema);
-      case ARRAY:
-        return processArrayField((GenericData.Array<?>) value, fieldSchema);
-      default:
-        return value;
-    }
-  }
-
-  private static Map<String, Object> processMapField(Map<String, Object> map, Schema fieldSchema) {
-    Map<String, Object> newMap = new java.util.HashMap<>();
-    for (Map.Entry<String, Object> entry : map.entrySet()) {
-      Object mapValue = entry.getValue();
-      Schema valueType = fieldSchema.getValueType();
-      newMap.put(entry.getKey(), processField(mapValue, valueType));
-    }
-    return newMap;
-  }
-
-  private static GenericData.Array<Object> processArrayField(GenericData.Array<?> array, Schema fieldSchema) {
-    GenericData.Array<Object> newArray = new GenericData.Array<>(array.size(), array.getSchema());
-    for (Object item : array) {
-      newArray.add(processField(item, fieldSchema.getElementType()));
-    }
-    return newArray;
   }
 
   /**

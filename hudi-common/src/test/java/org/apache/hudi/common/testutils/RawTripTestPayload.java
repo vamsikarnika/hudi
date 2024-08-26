@@ -19,6 +19,7 @@
 
 package org.apache.hudi.common.testutils;
 
+import org.apache.hudi.avro.MercifulJsonConverter;
 import org.apache.hudi.common.model.DefaultHoodieRecordPayload;
 import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.model.HoodieKey;
@@ -204,7 +205,7 @@ public class RawTripTestPayload implements HoodieRecordPayload<RawTripTestPayloa
     if (isDeleted) {
       return Option.empty();
     } else {
-      JsonToAvroConverterTestUtil jsonConverter = new JsonToAvroConverterTestUtil();
+      MercifulJsonConverter jsonConverter = new MercifulJsonConverter();
       return Option.of(jsonConverter.convert(getJsonData(), schema));
     }
   }
@@ -215,7 +216,7 @@ public class RawTripTestPayload implements HoodieRecordPayload<RawTripTestPayloa
   }
 
   public IndexedRecord getRecordToInsert(Schema schema) throws IOException {
-    JsonToAvroConverterTestUtil jsonConverter = new JsonToAvroConverterTestUtil();
+    MercifulJsonConverter jsonConverter = new MercifulJsonConverter();
     return jsonConverter.convert(getJsonData(), schema);
   }
 

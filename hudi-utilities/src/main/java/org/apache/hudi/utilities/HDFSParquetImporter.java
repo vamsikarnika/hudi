@@ -21,10 +21,10 @@ package org.apache.hudi.utilities;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.client.common.HoodieSparkEngineContext;
+import org.apache.hudi.common.HoodieJsonPayload;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
-import org.apache.hudi.common.model.HoodieAvroPayload;
 import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
@@ -199,7 +199,7 @@ public class HDFSParquetImporter implements Serializable {
             }
           }
           return new HoodieAvroRecord<>(new HoodieKey(rowField.toString(), partitionPath),
-              new HoodieAvroPayload(Option.of(genericRecord)));
+              new HoodieJsonPayload(genericRecord.toString()));
         });
   }
 

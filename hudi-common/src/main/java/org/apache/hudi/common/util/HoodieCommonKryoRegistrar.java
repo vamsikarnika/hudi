@@ -79,8 +79,9 @@ public class HoodieCommonKryoRegistrar {
         //kryo.register(BootstrapRecordPayload.class);
         AWSDmsAvroPayload.class,
         HoodieAvroPayload.class,
-        HoodieMetadataPayload.class,
         HoodieJsonPayload.class,
+        HoodieMetadataPayload.class,
+
         HoodieRecordLocation.class,
         HoodieRecordGlobalLocation.class,
         HoodieRecordDelegate.class
