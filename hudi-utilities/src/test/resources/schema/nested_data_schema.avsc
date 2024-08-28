@@ -9,8 +9,9 @@
     },
     {
       "name": "lastName",
-      "type": "string",
-      "aliases": ["surname"]
+      "type": ["null", "string"],
+      "aliases": ["surname"],
+      "default": null
     },
     {
       "name": "birthdate",
@@ -65,8 +66,9 @@
                 },
                 {
                   "name": "code",
-                  "type": "string",
-                  "aliases": ["countryCode"]
+                  "type": ["null", "string"],
+                  "aliases": ["countryCode"],
+                  "default": null
                 }
               ]
             }
