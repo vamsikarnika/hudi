@@ -31,7 +31,8 @@
             "type": "int"
           }
         ]
-      }
+      },
+      "aliases": ["dob", "dateofbirth"]
     },
     {
       "name": "address",

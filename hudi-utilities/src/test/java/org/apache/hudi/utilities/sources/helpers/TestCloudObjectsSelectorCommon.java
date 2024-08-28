@@ -179,7 +179,8 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     props.put("hoodie.streamer.source.cloud.data.reader.coalesce.aliases", "true");
     List<CloudObjectMetadata> input = Arrays.asList(
         new CloudObjectMetadata("src/test/resources/data/nested_data_1.json", 1000),
-        new CloudObjectMetadata("src/test/resources/data/nested_data_2.json", 1000)
+        new CloudObjectMetadata("src/test/resources/data/nested_data_2.json", 1000),
+        new CloudObjectMetadata("src/test/resources/data/nested_data_3.json", 1000)
     );
     CloudObjectsSelectorCommon cloudObjectsSelectorCommon = new CloudObjectsSelectorCommon(props);
     Option<Dataset<Row>> result = cloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, "json", Option.of(new FilebasedSchemaProvider(props, jsc)), 30);
@@ -188,7 +189,9 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     Row person1 = RowFactory.create("John", "Doe", RowFactory.create(1990, 5, 15), address1);
     Row address2 = RowFactory.create("456 Elm St", "Shelbyville", "67890", RowFactory.create("Spain", "SPN"));
     Row person2 = RowFactory.create("Jane", "Smith", RowFactory.create(1992, 9, 2), address2);
-    List<Row> expected = Arrays.asList(person1, person2);
+    Row address3 = RowFactory.create("789 Maple Ave", "Paris", "98765", RowFactory.create("France", "FRA"));
+    Row person3 = RowFactory.create("John", "James", RowFactory.create(1985, 6, 15), address3);
+    List<Row> expected = Arrays.asList(person1, person2, person3);
     List<Row> actual = result.get().collectAsList();
     Assertions.assertEquals(new HashSet<>(expected), new HashSet<>(actual));
     Schema schema = new Schema.Parser().parse(new File(schemaFilePath));
