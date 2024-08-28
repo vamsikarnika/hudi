@@ -99,7 +99,6 @@ public class CloudObjectsSelectorCommon {
   public static final String GCS_OBJECT_SIZE = "size";
   private static final String SPACE_DELIMTER = " ";
   private static final String GCS_PREFIX = "gs://";
-  private static final String HAS_ALIAS_FIELD = "hasAliasField";
 
   private final TypedProperties properties;
 
