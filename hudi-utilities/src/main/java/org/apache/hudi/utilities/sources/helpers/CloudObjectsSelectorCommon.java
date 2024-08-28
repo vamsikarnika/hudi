@@ -416,8 +416,7 @@ public class CloudObjectsSelectorCommon {
   }
 
   private static Dataset<Row> mergeAliasFields(Dataset<Row> dataset, Schema sourceSchema) {
-    StructType rowSchema = dataset.schema();
-    return mergeNestedAliases(mergeTopLevelAliases(dataset, sourceSchema), sourceSchema, rowSchema);
+    return mergeNestedAliases(mergeTopLevelAliases(dataset, sourceSchema), sourceSchema);
   }
 
   /**
@@ -457,10 +456,9 @@ public class CloudObjectsSelectorCommon {
    *
    * @param dataset      The dataset to process.
    * @param sourceSchema The Avro schema defining the structure and aliases of the data.
-   * @param rowSchema    The row schema of the dataset that corresponds to the Avro schema.
    * @return A dataset with nested fields merged with their aliases.
    */
-  private static Dataset<Row> mergeNestedAliases(Dataset<Row> dataset, Schema sourceSchema, StructType rowSchema) {
+  private static Dataset<Row> mergeNestedAliases(Dataset<Row> dataset, Schema sourceSchema) {
     for (Schema.Field field : sourceSchema.getFields()) {
       // check if this is a nested record and contains an alias field within
       if (isNestedRecord(field) && hasFieldWithAliases(field.schema())) {
