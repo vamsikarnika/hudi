@@ -314,7 +314,7 @@ public class CloudObjectsSelectorCommon {
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (isCoalesceRequired(properties, sourceSchema)) {
-        dataset = spark.createDataFrame(mergeAliasFields(dataset, sourceSchema).rdd(), rowSchema);
+        dataset = spark.createDataFrame(coalesceAliasFields(dataset, sourceSchema).rdd(), rowSchema);
       }
     }
 
@@ -415,8 +415,8 @@ public class CloudObjectsSelectorCommon {
     aliases.forEach(alias -> fieldList.add(new StructField(alias, dataType, true, metadata)));
   }
 
-  private static Dataset<Row> mergeAliasFields(Dataset<Row> dataset, Schema sourceSchema) {
-    return mergeNestedAliases(mergeTopLevelAliases(dataset, sourceSchema), sourceSchema);
+  private static Dataset<Row> coalesceAliasFields(Dataset<Row> dataset, Schema sourceSchema) {
+    return coalesceNestedAliases(coalesceTopLevelAliases(dataset, sourceSchema), sourceSchema);
   }
 
   /**
@@ -430,14 +430,14 @@ public class CloudObjectsSelectorCommon {
    * @param sourceSchema The Avro schema defining the fields and their aliases.
    * @return A dataset with fields merged with their aliases.
    */
-  private static Dataset<Row> mergeTopLevelAliases(Dataset<Row> dataset, Schema sourceSchema) {
+  private static Dataset<Row> coalesceTopLevelAliases(Dataset<Row> dataset, Schema sourceSchema) {
     return sourceSchema.getFields().stream()
         .filter(field -> !field.aliases().isEmpty())
         .reduce(dataset,
-            (ds, field) -> coalesceFieldAliases(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
+            (ds, field) -> coalesceAndDropAliasFields(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
   }
 
-  private static Dataset<Row> coalesceFieldAliases(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
+  private static Dataset<Row> coalesceAndDropAliasFields(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
     List<Column> columns = new ArrayList<>();
     columns.add(dataset.col(fieldName));
     aliases.forEach(alias -> columns.add(dataset.col(alias)));
@@ -458,7 +458,7 @@ public class CloudObjectsSelectorCommon {
    * @param sourceSchema The Avro schema defining the structure and aliases of the data.
    * @return A dataset with nested fields merged with their aliases.
    */
-  private static Dataset<Row> mergeNestedAliases(Dataset<Row> dataset, Schema sourceSchema) {
+  private static Dataset<Row> coalesceNestedAliases(Dataset<Row> dataset, Schema sourceSchema) {
     for (Schema.Field field : sourceSchema.getFields()) {
       // check if this is a nested record and contains an alias field within
       if (isNestedRecord(field) && hasFieldWithAliases(field.schema())) {
