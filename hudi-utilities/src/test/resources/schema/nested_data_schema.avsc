@@ -13,6 +13,27 @@
       "aliases": ["surname"]
     },
     {
+      "name": "birthdate",
+      "type": {
+        "type": "record",
+        "name": "Birthdate",
+        "fields": [
+          {
+            "name": "year",
+            "type": "int"
+          },
+          {
+            "name": "month",
+            "type": "int"
+          },
+          {
+            "name": "day",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
       "name": "address",
       "type": {
         "type": "record",
@@ -30,6 +51,24 @@
             "name": "zipCode",
             "type": "string",
             "aliases": ["postalCode"]
+          },
+          {
+            "name": "country",
+            "type": {
+              "type": "record",
+              "name": "Country",
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "name": "code",
+                  "type": "string",
+                  "aliases": ["countryCode"]
+                }
+              ]
+            }
           }
         ]
       },

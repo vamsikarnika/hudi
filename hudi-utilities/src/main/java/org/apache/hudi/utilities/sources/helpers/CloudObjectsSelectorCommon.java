@@ -46,6 +46,9 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.MetadataBuilder;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
@@ -61,7 +64,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.common.util.ConfigUtils.containsConfigProperty;
@@ -97,6 +99,7 @@ public class CloudObjectsSelectorCommon {
   public static final String GCS_OBJECT_SIZE = "size";
   private static final String SPACE_DELIMTER = " ";
   private static final String GCS_PREFIX = "gs://";
+  private static final String HAS_ALIAS_FIELD = "hasAliasField";
 
   private final TypedProperties properties;
 
@@ -312,7 +315,7 @@ public class CloudObjectsSelectorCommon {
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (rowSchema != null && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
-        dataset = spark.createDataFrame(dropAliasesWithCoalesce(dataset, sourceSchema).rdd(), rowSchema);
+        dataset = spark.createDataFrame(mergeAliasFields(dataset, sourceSchema).rdd(), rowSchema);
       }
     }
 
@@ -330,61 +333,160 @@ public class CloudObjectsSelectorCommon {
     return Option.of(dataset);
   }
 
-  public static StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
+  private static StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
     Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
         .collect(Collectors.toMap(StructField::name, Function.identity()));
-    List<StructField> aliasFields = extractAliasFields(avroSchema, rowFieldsMap);
 
     StructField[] modifiedFields = avroSchema.getFields().stream()
-        .map(avroField -> {
-          StructField rowField = rowFieldsMap.get(avroField.name());
-
-          if (avroField.aliases().isEmpty() || rowField.nullable()) {
-            return rowField;
-          } else {
-            // if avro field contains aliases amd nullable set to false, replace field with nullable set to true
-            return new StructField(rowField.name(), rowField.dataType(), true, rowField.metadata());
-          }
-        })
+        .flatMap(avroField -> generateRowFieldsWithAliases(avroField, rowFieldsMap.get(avroField.name())).stream())
         .toArray(StructField[]::new);
-    return new StructType(Stream.concat(
-        Arrays.stream(modifiedFields),
-        aliasFields.stream()
-    ).toArray(StructField[]::new));
+
+    return new StructType(modifiedFields);
   }
 
-  public static Dataset<Row> dropAliasesWithCoalesce(Dataset<Row> dataset, Schema sourceSchema) {
-    // Process all fields with aliases and coalesce them in the dataset
+  /**
+   * Generates a list of StructFields with aliases applied based on the provided Avro field schema.
+   * <p>
+   * This method processes a given Avro field and its corresponding Spark SQL StructField, handling
+   * nested records and aliases. If the Avro field contains nested records, the method recursively
+   * updates the schema for these records and applies any aliases defined in the Avro schema.
+   * If the Avro field has aliases, they are added as new fields with nullable set to true and
+   * appropriate metadata in the returned list. If no aliases or nesting are present, the original
+   * StructField is returned unchanged.
+   *
+   * @param avroField The Avro field schema to process.
+   * @param rowField  The corresponding Spark SQL StructField to map the Avro field to.
+   * @return A list of StructFields with aliases applied as per the Avro schema.
+   */
+  private static List<StructField> generateRowFieldsWithAliases(Schema.Field avroField, StructField rowField) {
+    List<StructField> fieldList = new ArrayList<>();
+
+    // Handle nested records
+    if (isNestedRecord(avroField)) {
+      StructType updatedSchema = addAliasesToRowSchema(avroField.schema(), (StructType) rowField.dataType());
+
+      if (schemaModifiedOrHasAliases(avroField, updatedSchema, rowField)) {
+        // Add the original field with the updated schema and add aliases if present
+        addFieldWithAliases(fieldList, avroField.name(), updatedSchema, rowField.metadata(), avroField.aliases());
+      } else {
+        fieldList.add(rowField);
+      }
+    } else if (!avroField.aliases().isEmpty()) {
+      // If the field has aliases, add them to the schema
+      addFieldWithAliases(fieldList, avroField.name(), rowField.dataType(), rowField.metadata(), avroField.aliases());
+    } else {
+      // No aliases or nesting, return the original field
+      fieldList.add(rowField);
+    }
+    return fieldList;
+  }
+
+  private static void addFieldWithAliases(List<StructField> fieldList, String fieldName, DataType dataType, Metadata metadata, Set<String> aliases) {
+    Metadata updatedMetadata = new MetadataBuilder()
+        .withMetadata(metadata)
+        .putBoolean(HAS_ALIAS_FIELD, true)
+        .build();
+
+    fieldList.add(new StructField(fieldName, dataType, true, updatedMetadata));
+    aliases.forEach(alias -> fieldList.add(new StructField(alias, dataType, true, updatedMetadata)));
+  }
+
+  private static Dataset<Row> mergeAliasFields(Dataset<Row> dataset, Schema sourceSchema) {
+    StructType rowSchema = dataset.schema();
+    return mergeNestedAliases(mergeTopLevelAliases(dataset, sourceSchema), sourceSchema, rowSchema);
+  }
+
+  /**
+   * Merges top-level fields with their aliases in the dataset.
+   * <p>
+   * This method goes through the top-level fields in the Avro schema, and for any field that has aliases,
+   * it combines them in the dataset using a coalesce operation. This ensures that if a field is null,
+   * the value from its alias is used instead.
+   *
+   * @param dataset      The dataset to process.
+   * @param sourceSchema The Avro schema defining the fields and their aliases.
+   * @return A dataset with fields merged with their aliases.
+   */
+  private static Dataset<Row> mergeTopLevelAliases(Dataset<Row> dataset, Schema sourceSchema) {
     return sourceSchema.getFields().stream()
         .filter(field -> !field.aliases().isEmpty())
-        .reduce(dataset, (ds, field) -> coalesceFieldAliases(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
+        .reduce(dataset,
+            (ds, field) -> coalesceFieldAliases(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
   }
 
   private static Dataset<Row> coalesceFieldAliases(Dataset<Row> dataset, String fieldName, Set<String> aliases) {
-    // Build a list of columns to coalesce
     List<Column> columns = new ArrayList<>();
     columns.add(dataset.col(fieldName));
     aliases.forEach(alias -> columns.add(dataset.col(alias)));
 
-    // Coalesce columns and drop aliases
-    Dataset<Row> coalescedDataset = dataset.withColumn(fieldName, functions.coalesce(columns.toArray(new Column[0])));
-    return coalescedDataset.drop(aliases.toArray(new String[0]));
+    return dataset.withColumn(fieldName, functions.coalesce(columns.toArray(new Column[0])))
+        .drop(aliases.toArray(new String[0]));
   }
 
-  private static List<StructField> extractAliasFields(Schema avroSchema, Map<String, StructField> rowFieldsMap) {
-    List<StructField> aliasFields = new ArrayList<>();
-
-    for (Schema.Field avroField : avroSchema.getFields()) {
-      String avroFieldName = avroField.name();
-      StructField rowField = rowFieldsMap.get(avroFieldName);
-
-      if (rowField != null && !avroField.aliases().isEmpty()) {
-        for (String alias : avroField.aliases()) {
-          aliasFields.add(new StructField(alias, rowField.dataType(), true, rowField.metadata()));
-        }
+  /**
+   * Merges nested fields with their aliases in the dataset.
+   * <p>
+   * This method iterates through the fields of the provided Avro schema and checks if they represent
+   * nested records. For each nested record, it verifies if there are any alias fields present. If
+   * aliases are found, the method generates a list of nested fields, coalescing them with their aliases,
+   * and creates a new column in the dataset with the merged data.
+   *
+   * @param dataset      The dataset to process.
+   * @param sourceSchema The Avro schema defining the structure and aliases of the data.
+   * @param rowSchema    The row schema of the dataset that corresponds to the Avro schema.
+   * @return A dataset with nested fields merged with their aliases.
+   */
+  private static Dataset<Row> mergeNestedAliases(Dataset<Row> dataset, Schema sourceSchema, StructType rowSchema) {
+    for (Schema.Field field : sourceSchema.getFields()) {
+      // check if this is a nested record and contains an alias field within
+      if (isNestedRecord(field) && containsAliasField(rowSchema, field.name())) {
+        List<Column> columns = getNestedFields("", field, dataset);
+        dataset = dataset.withColumn(field.name(), functions.struct(columns.toArray(new Column[0])));
       }
     }
-    return aliasFields;
+    return dataset;
+  }
+
+  private static boolean containsAliasField(StructType schema, String fieldName) {
+    StructField rowField = Arrays.stream(schema.fields())
+        .filter(f -> f.name().equals(fieldName))
+        .findFirst()
+        .orElse(null);
+    if (rowField == null) {
+      return false;
+    }
+    return rowField.metadata().contains(HAS_ALIAS_FIELD) && rowField.metadata().getBoolean(HAS_ALIAS_FIELD);
+  }
+
+  private static List<Column> getNestedFields(String parentField, Schema.Field field, Dataset<Row> dataset) {
+    return field.schema().getFields().stream()
+        .map(avroField -> {
+          List<Column> columns = new ArrayList<>();
+          String newParentField = getFullName(parentField, field.name());
+          if (avroField.schema().getType() == Schema.Type.RECORD) {
+            // if field is nested, recursively fetch nested column
+            columns.add(functions.struct(getNestedFields(newParentField, avroField, dataset).toArray(new Column[0])));
+          } else {
+            columns.add(dataset.col(getFullName(newParentField, avroField.name())));
+          }
+          avroField.aliases().forEach(alias -> columns.add(dataset.col(getFullName(newParentField, alias))));
+          // if avro field contains aliases, do a coalesce with aliases otherwise return actual column
+          return avroField.aliases().isEmpty() ? columns.get(0)
+              : functions.coalesce(columns.toArray(new Column[0])).alias(avroField.name());
+        })
+        .collect(Collectors.toList());
+  }
+
+  private static boolean isNestedRecord(Schema.Field field) {
+    return field.schema().getType() == Schema.Type.RECORD;
+  }
+
+  private static String getFullName(String namespace, String fieldName) {
+    return namespace.isEmpty() ? fieldName : namespace + "." + fieldName;
+  }
+
+  private static boolean schemaModifiedOrHasAliases(Schema.Field avroField, StructType modifiedNestedSchema, StructField rowField) {
+    return !modifiedNestedSchema.equals(rowField.dataType()) || !avroField.aliases().isEmpty();
   }
 
   private static Option<String> getPropVal(TypedProperties props, ConfigProperty<String> configProperty) {
