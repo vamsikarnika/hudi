@@ -48,7 +48,6 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.MetadataBuilder;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
@@ -61,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -276,8 +276,8 @@ public class CloudObjectsSelectorCommon {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
         rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema);
-        if (getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
-          reader.schema(addAliasesToRowSchema(sourceSchema, rowSchema));
+        if (isCoalesceRequired(properties, sourceSchema)) {
+          reader = reader.schema(addAliasesToRowSchema(sourceSchema, rowSchema));
         } else {
           reader = reader.schema(rowSchema);
         }
@@ -314,7 +314,7 @@ public class CloudObjectsSelectorCommon {
 
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
-      if (rowSchema != null && getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)) {
+      if (isCoalesceRequired(properties, sourceSchema)) {
         dataset = spark.createDataFrame(mergeAliasFields(dataset, sourceSchema).rdd(), rowSchema);
       }
     }
@@ -331,6 +331,36 @@ public class CloudObjectsSelectorCommon {
     }
     dataset = coalesceOrRepartition(dataset, numPartitions);
     return Option.of(dataset);
+  }
+
+  private static boolean isCoalesceRequired(TypedProperties properties, Schema sourceSchema) {
+    return getBooleanWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_READER_COALESCE_ALIAS_COLUMNS)
+        && Objects.nonNull(sourceSchema)
+        && hasFieldWithAliases(sourceSchema);
+  }
+
+  /**
+   * Recursively checks if an Avro schema or any of its nested fields contain aliases.
+   *
+   * @param schema The Avro schema to check.
+   * @return True if the schema or any of its fields contain aliases, false otherwise.
+   */
+  public static boolean hasFieldWithAliases(Schema schema) {
+    // If the schema is a record, check its fields recursively
+    if (schema.getType() == Schema.Type.RECORD) {
+      for (Schema.Field field : schema.getFields()) {
+        // Check if the field has aliases
+        if (!field.aliases().isEmpty()) {
+          return true;
+        }
+        // Recursively check the field's schema for aliases
+        if (hasFieldWithAliases(field.schema())) {
+          return true;
+        }
+      }
+    }
+    // No aliases found
+    return false;
   }
 
   private static StructType addAliasesToRowSchema(Schema avroSchema, StructType rowSchema) {
@@ -382,13 +412,8 @@ public class CloudObjectsSelectorCommon {
   }
 
   private static void addFieldWithAliases(List<StructField> fieldList, String fieldName, DataType dataType, Metadata metadata, Set<String> aliases) {
-    Metadata updatedMetadata = new MetadataBuilder()
-        .withMetadata(metadata)
-        .putBoolean(HAS_ALIAS_FIELD, true)
-        .build();
-
-    fieldList.add(new StructField(fieldName, dataType, true, updatedMetadata));
-    aliases.forEach(alias -> fieldList.add(new StructField(alias, dataType, true, updatedMetadata)));
+    fieldList.add(new StructField(fieldName, dataType, true, metadata));
+    aliases.forEach(alias -> fieldList.add(new StructField(alias, dataType, true, metadata)));
   }
 
   private static Dataset<Row> mergeAliasFields(Dataset<Row> dataset, Schema sourceSchema) {
@@ -439,23 +464,12 @@ public class CloudObjectsSelectorCommon {
   private static Dataset<Row> mergeNestedAliases(Dataset<Row> dataset, Schema sourceSchema, StructType rowSchema) {
     for (Schema.Field field : sourceSchema.getFields()) {
       // check if this is a nested record and contains an alias field within
-      if (isNestedRecord(field) && containsAliasField(rowSchema, field.name())) {
+      if (isNestedRecord(field) && hasFieldWithAliases(field.schema())) {
         List<Column> columns = getNestedFields("", field, dataset);
         dataset = dataset.withColumn(field.name(), functions.struct(columns.toArray(new Column[0])));
       }
     }
     return dataset;
-  }
-
-  private static boolean containsAliasField(StructType schema, String fieldName) {
-    StructField rowField = Arrays.stream(schema.fields())
-        .filter(f -> f.name().equals(fieldName))
-        .findFirst()
-        .orElse(null);
-    if (rowField == null) {
-      return false;
-    }
-    return rowField.metadata().contains(HAS_ALIAS_FIELD) && rowField.metadata().getBoolean(HAS_ALIAS_FIELD);
   }
 
   private static List<Column> getNestedFields(String parentField, Schema.Field field, Dataset<Row> dataset) {

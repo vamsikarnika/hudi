@@ -160,6 +160,6 @@ public class CloudSourceConfig extends HoodieConfig {
       .key(STREAMER_CONFIG_PREFIX + "source.cloud.data.reader.coalesce.aliases")
       .defaultValue(false)
       .markAdvanced()
-      .sinceVersion("0.14.1")
+      .sinceVersion("0.15.0")
       .withDocumentation("Boolean value to allow coalesce alias columns with actual columns while reading from source");
 }
