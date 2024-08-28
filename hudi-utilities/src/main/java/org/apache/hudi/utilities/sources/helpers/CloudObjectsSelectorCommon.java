@@ -481,7 +481,7 @@ public class CloudObjectsSelectorCommon {
             columns.add(dataset.col(getFullName(newParentField, avroField.name())));
           }
           avroField.aliases().forEach(alias -> columns.add(dataset.col(getFullName(newParentField, alias))));
-          // if avro field contains aliases, do a coalesce with aliases otherwise return actual column
+          // if avro field contains aliases, coalesce the column with others matching the aliases otherwise return actual column
           return avroField.aliases().isEmpty() ? columns.get(0)
               : functions.coalesce(columns.toArray(new Column[0])).alias(avroField.name());
         })
