@@ -103,7 +103,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
   }
 
   @Test
-  public void loadDatasetWithSchemaAndAliasFields() {
+  void loadDatasetWithSchemaAndAliasFields() {
     TypedProperties props = new TypedProperties();
     TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc");
     String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc").getPath();
@@ -144,7 +144,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
   }
 
   @Test
-  public void loadDatasetWithSchemaAndCoalesceAliases() {
+  void loadDatasetWithSchemaAndCoalesceAliases() {
     TypedProperties props = new TypedProperties();
     TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc");
     String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_data_schema.avsc").getPath();
@@ -168,7 +168,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
   }
 
   @Test
-  public void loadDatasetWithNestedSchemaAndCoalesceAliases() throws IOException {
+  void loadDatasetWithNestedSchemaAndCoalesceAliases() throws IOException {
     TypedProperties props = new TypedProperties();
     TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc");
     String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/nested_data_schema.avsc").getPath();
