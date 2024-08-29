@@ -58,6 +58,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -344,10 +345,10 @@ public class CloudObjectsSelectorCommon {
    * @param schema The Avro schema to check.
    * @return True if the schema or any of its fields contain aliases, false otherwise.
    */
-  public static boolean hasFieldWithAliases(Schema schema) {
+  private static boolean hasFieldWithAliases(Schema schema) {
     // If the schema is a record, check its fields recursively
-    if (schema.getType() == Schema.Type.RECORD) {
-      for (Schema.Field field : schema.getFields()) {
+    if (isNestedRecord(schema)) {
+      for (Schema.Field field : getRecordFields(schema)) {
         // Check if the field has aliases
         if (!field.aliases().isEmpty()) {
           return true;
@@ -366,11 +367,27 @@ public class CloudObjectsSelectorCommon {
     Map<String, StructField> rowFieldsMap = Arrays.stream(rowSchema.fields())
         .collect(Collectors.toMap(StructField::name, Function.identity()));
 
-    StructField[] modifiedFields = avroSchema.getFields().stream()
+    StructField[] modifiedFields = getRecordFields(avroSchema).stream()
         .flatMap(avroField -> generateRowFieldsWithAliases(avroField, rowFieldsMap.get(avroField.name())).stream())
         .toArray(StructField[]::new);
 
     return new StructType(modifiedFields);
+  }
+
+  private static List<Schema.Field> getRecordFields(Schema schema) {
+    if (schema.getType() == Schema.Type.RECORD) {
+      return schema.getFields();
+    }
+
+    if (schema.getType() == Schema.Type.UNION) {
+      return schema.getTypes().stream()
+          .filter(subSchema -> subSchema.getType() == Schema.Type.RECORD)
+          .findFirst()
+          .map(Schema::getFields)
+          .orElse(Collections.emptyList());
+    }
+
+    return Collections.emptyList();
   }
 
   /**
@@ -391,7 +408,7 @@ public class CloudObjectsSelectorCommon {
     List<StructField> fieldList = new ArrayList<>();
 
     // Handle nested records
-    if (isNestedRecord(avroField)) {
+    if (isNestedRecord(avroField.schema())) {
       StructType updatedSchema = addAliasesToRowSchema(avroField.schema(), (StructType) rowField.dataType());
 
       if (schemaModifiedOrHasAliases(avroField, updatedSchema, rowField)) {
@@ -431,7 +448,7 @@ public class CloudObjectsSelectorCommon {
    * @return A dataset with fields merged with their aliases.
    */
   private static Dataset<Row> coalesceTopLevelAliases(Dataset<Row> dataset, Schema sourceSchema) {
-    return sourceSchema.getFields().stream()
+    return getRecordFields(sourceSchema).stream()
         .filter(field -> !field.aliases().isEmpty())
         .reduce(dataset,
             (ds, field) -> coalesceAndDropAliasFields(ds, field.name(), field.aliases()), (ds1, ds2) -> ds1);
@@ -459,24 +476,23 @@ public class CloudObjectsSelectorCommon {
    * @return A dataset with nested fields merged with their aliases.
    */
   private static Dataset<Row> coalesceNestedAliases(Dataset<Row> dataset, Schema sourceSchema) {
-    for (Schema.Field field : sourceSchema.getFields()) {
+    for (Schema.Field field : getRecordFields(sourceSchema)) {
       // check if this is a nested record and contains an alias field within
-      if (isNestedRecord(field) && hasFieldWithAliases(field.schema())) {
-        List<Column> columns = getNestedFields("", field, dataset);
-        dataset = dataset.withColumn(field.name(), functions.struct(columns.toArray(new Column[0])));
+      if (isNestedRecord(field.schema()) && hasFieldWithAliases(field.schema())) {
+        dataset = dataset.withColumn(field.name(), functions.struct(getNestedFields("", field, dataset)));
       }
     }
     return dataset;
   }
 
-  private static List<Column> getNestedFields(String parentField, Schema.Field field, Dataset<Row> dataset) {
-    return field.schema().getFields().stream()
+  private static Column[] getNestedFields(String parentField, Schema.Field field, Dataset<Row> dataset) {
+    return getRecordFields(field.schema()).stream()
         .map(avroField -> {
           List<Column> columns = new ArrayList<>();
           String newParentField = getFullName(parentField, field.name());
-          if (avroField.schema().getType() == Schema.Type.RECORD) {
+          if (isNestedRecord(avroField.schema())) {
             // if field is nested, recursively fetch nested column
-            columns.add(functions.struct(getNestedFields(newParentField, avroField, dataset).toArray(new Column[0])));
+            columns.add(functions.struct(getNestedFields(newParentField, avroField, dataset)));
           } else {
             columns.add(dataset.col(getFullName(newParentField, avroField.name())));
           }
@@ -484,12 +500,20 @@ public class CloudObjectsSelectorCommon {
           // if avro field contains aliases, coalesce the column with others matching the aliases otherwise return actual column
           return avroField.aliases().isEmpty() ? columns.get(0)
               : functions.coalesce(columns.toArray(new Column[0])).alias(avroField.name());
-        })
-        .collect(Collectors.toList());
+        }).toArray(Column[]::new);
   }
 
-  private static boolean isNestedRecord(Schema.Field field) {
-    return field.schema().getType() == Schema.Type.RECORD;
+  private static boolean isNestedRecord(Schema schema) {
+    if (schema.getType() == Schema.Type.RECORD) {
+      return true;
+    }
+
+    if (schema.getType() == Schema.Type.UNION) {
+      return schema.getTypes().stream()
+          .anyMatch(subSchema -> subSchema.getType() == Schema.Type.RECORD);
+    }
+
+    return false;
   }
 
   private static String getFullName(String namespace, String fieldName) {

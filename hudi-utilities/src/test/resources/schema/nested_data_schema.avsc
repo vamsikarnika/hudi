@@ -56,7 +56,7 @@
           },
           {
             "name": "country",
-            "type": {
+            "type": ["null", {
               "type": "record",
               "name": "Country",
               "fields": [
@@ -71,7 +71,7 @@
                   "default": null
                 }
               ]
-            }
+            }]
           }
         ]
       },
