@@ -18,16 +18,22 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.avro.MercifulJsonConverterTestBase;
 import org.apache.hudi.common.testutils.SchemaTestUtil;
+import org.apache.hudi.utilities.deltastreamer.TestSourceFormatAdapter;
 import org.apache.hudi.utilities.exception.HoodieJsonToRowConversionException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Conversions;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericFixed;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.StructType;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -36,6 +42,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,6 +57,18 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
   private static final MercifulJsonToRowConverter CONVERTER = new MercifulJsonToRowConverter(true, "__");
 
   private static final String SIMPLE_AVRO_WITH_DEFAULT = "/schema/simple-test-with-default-value.avsc";
+
+  protected static SparkSession spark;
+
+  @BeforeAll
+  public static void start() {
+    spark = SparkSession
+        .builder()
+        .master("local[*]")
+        .appName(TestSourceFormatAdapter.class.getName())
+        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        .getOrCreate();
+  }
 
   @Test
   void basicConversion() throws IOException {
@@ -68,8 +87,9 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     values.set(1, number);
     values.set(3, color);
     Row recRow = RowFactory.create(values.toArray());
-
-    assertEquals(recRow, CONVERTER.convertToRow(json, simpleSchema));
+    Row realRow = CONVERTER.convertToRow(json, simpleSchema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), simpleSchema);
+    assertEquals(recRow, realRow);
   }
 
   private static final String DECIMAL_AVRO_FILE_PATH = "/decimal-logical-type.avsc";
@@ -93,6 +113,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
 
     Row expectRow = RowFactory.create(bigDecimal);
     Row realRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), schema);
     assertEquals(expectRow, realRow);
   }
 
@@ -161,6 +182,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
 
     Row expectRow = RowFactory.create(bigDecimal);
     Row realRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), schema);
     assertEquals(expectRow, realRow);
   }
 
@@ -177,6 +199,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
       BigDecimal bigDecimal = new BigDecimal(expected);
       Row expectedRow = RowFactory.create(bigDecimal);
       Row actualRow = CONVERTER.convertToRow(json, schema);
+      validateSchemaCompatibility(Collections.singletonList(actualRow), schema);
       assertEquals(expectedRow, actualRow);
     } else {
       assertThrows(HoodieJsonToRowConversionException.class, () -> CONVERTER.convertToRow(json, schema));
@@ -261,6 +284,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     }
     Row rec = RowFactory.create(java.sql.Date.valueOf(groundTruthRow));
     Row realRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), schema);
     assertEquals(rec.getDate(0).toString(), realRow.getDate(0).toString());
   }
 
@@ -308,7 +332,9 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String json = MAPPER.writeValueAsString(data);
 
     Row rec = RowFactory.create(milliSecOfDay, microSecOfDay);
-    assertEquals(rec, CONVERTER.convertToRow(json, schema));
+    Row actualRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(actualRow), schema);
+    assertEquals(rec, actualRow);
   }
 
   @ParameterizedTest
@@ -341,7 +367,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
       Long expectedMicroSecOfDay, Object timeMilli, Object timeMicro) throws IOException {
     // Example inputs
     long microSecOfDay = expectedMicroSecOfDay;
-    long milliSecOfDay = expectedMicroSecOfDay / 1000; // Represents 12h 30 min since the start of the day
+    long milliSecOfDay = expectedMicroSecOfDay / 1000;
 
     // Define the schema for the date logical type
     Schema schema = SchemaTestUtil.getSchema(TIMESTAMP_AVRO_FILE_PATH);
@@ -351,8 +377,10 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     data.put("timestampMicrosField", timeMicro);
     String json = MAPPER.writeValueAsString(data);
 
-    Row rec = RowFactory.create(milliSecOfDay, microSecOfDay);
-    assertEquals(rec, CONVERTER.convertToRow(json, schema));
+    Row rec = RowFactory.create(new Timestamp(milliSecOfDay), new Timestamp(microSecOfDay / 1000));
+    Row actualRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(actualRow), schema);
+    assertEquals(rec, actualRow);
   }
 
   @ParameterizedTest
@@ -397,6 +425,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
 
     Row rec = RowFactory.create(microSecOfDay, milliSecOfDay);
     Row realRow = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), schema);
     assertEquals(rec.get(0).toString(), realRow.get(0).toString());
     assertEquals(rec.get(1).toString(), realRow.get(1).toString());
   }
@@ -437,7 +466,9 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String json = MAPPER.writeValueAsString(data);
 
     Row rec = RowFactory.create(uuid);
-    assertEquals(rec, CONVERTER.convertToRow(json, schema));
+    Row real = CONVERTER.convertToRow(json, schema);
+    validateSchemaCompatibility(Collections.singletonList(real), schema);
+    assertEquals(rec, real);
   }
 
   @ParameterizedTest
@@ -447,7 +478,9 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String json = String.format("{\"name\": %s, \"favorite_number\": 1337, \"favorite_color\": 10}", nameInput);
 
     Row expectedRow = RowFactory.create(nameInput, 1337, "10");
-    assertEquals(expectedRow, CONVERTER.convertToRow(json, simpleSchema));
+    Row realRow = CONVERTER.convertToRow(json, simpleSchema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), simpleSchema);
+    assertEquals(expectedRow, realRow);
   }
 
   @ParameterizedTest
@@ -460,7 +493,9 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     Schema nestedSchema = new Schema.Parser().parse(nestedSchemaStr);
 
     Row expected = RowFactory.create("Jane Smith", RowFactory.create(contactInput));
-    assertEquals(expected, CONVERTER.convertToRow(json, nestedSchema));
+    Row real = CONVERTER.convertToRow(json, nestedSchema);
+    validateSchemaCompatibility(Collections.singletonList(real), nestedSchema);
+    assertEquals(expected, real);
   }
 
   @Test
@@ -476,13 +511,24 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     data.put("$name", name);
     data.put("favorite-number", number);
     data.put("favorite.color!", color);
+    data.put("unmatched", "somethig");
     String json = MAPPER.writeValueAsString(data);
 
     List<Object> values = new ArrayList<>(Collections.nCopies(sanitizedSchema.getFields().size(), null));
     values.set(0, name);
     values.set(1, number);
     values.set(2, color);
+    values.set(3, "somethig");
     Row recRow = RowFactory.create(values.toArray());
-    assertEquals(recRow, CONVERTER.convertToRow(json, sanitizedSchema));
+    Row realRow = CONVERTER.convertToRow(json, sanitizedSchema);
+    validateSchemaCompatibility(Collections.singletonList(realRow), sanitizedSchema);
+    assertEquals(recRow, realRow);
+  }
+
+  private void validateSchemaCompatibility(List<Row> rows, Schema schema) {
+    StructType rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(schema);
+    Dataset<Row> dataset = spark.createDataFrame(rows, rowSchema);
+    dataset.collect();
+
   }
 }
