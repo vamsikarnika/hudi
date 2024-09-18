@@ -65,7 +65,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     spark = SparkSession
         .builder()
         .master("local[*]")
-        .appName(TestSourceFormatAdapter.class.getName())
+        .appName(TestMercifulJsonToRowConverter.class.getName())
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .getOrCreate();
   }
