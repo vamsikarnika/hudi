@@ -256,7 +256,7 @@ public class MercifulJsonToRowConverter extends MercifulJsonConverter {
     @Override
     public Pair<Boolean, Object> convert(
         Object value, String name, Schema schema) {
-      Pair<Boolean, Object> result =  convertCommon(
+      Pair<Boolean, Object> result = convertCommon(
           new Parser.LongParser() {
             @Override
             public Pair<Boolean, Object> handleStringValue(String value) {
