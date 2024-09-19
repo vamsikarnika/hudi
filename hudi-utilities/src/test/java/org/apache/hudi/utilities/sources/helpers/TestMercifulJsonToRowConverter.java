@@ -32,6 +32,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.StructType;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -48,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -67,6 +69,11 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
         .appName(TestMercifulJsonToRowConverter.class.getName())
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .getOrCreate();
+  }
+
+  @AfterAll
+  public static void clear() {
+    spark.close();
   }
 
   @Test
@@ -506,18 +513,19 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String name = "John Smith";
     int number = 1337;
     String color = "Blue. No yellow!";
+    String unmatched = "unmatched";
     Map<String, Object> data = new HashMap<>();
     data.put("$name", name);
     data.put("favorite-number", number);
     data.put("favorite.color!", color);
-    data.put("unmatched", "somethig");
+    data.put("unmatched", unmatched);
     String json = MAPPER.writeValueAsString(data);
 
     List<Object> values = new ArrayList<>(Collections.nCopies(sanitizedSchema.getFields().size(), null));
     values.set(0, name);
     values.set(1, number);
     values.set(2, color);
-    values.set(3, "somethig");
+    values.set(3, unmatched);
     Row recRow = RowFactory.create(values.toArray());
     Row realRow = CONVERTER.convertToRow(json, sanitizedSchema);
     validateSchemaCompatibility(Collections.singletonList(realRow), sanitizedSchema);
@@ -527,6 +535,6 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
   private void validateSchemaCompatibility(List<Row> rows, Schema schema) {
     StructType rowSchema = AvroConversionUtils.convertAvroSchemaToStructType(schema);
     Dataset<Row> dataset = spark.createDataFrame(rows, rowSchema);
-    dataset.collect();
+    assertDoesNotThrow(dataset::collect, "Schema validation and dataset creation should not throw any exceptions.");
   }
 }
