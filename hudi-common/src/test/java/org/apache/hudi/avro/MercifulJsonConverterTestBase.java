@@ -474,4 +474,20 @@ public class MercifulJsonConverterTestBase {
         Arguments.of(null, Integer.toString(Integer.MIN_VALUE)) // not supported by row
     );
   }
+
+  static Stream<Object> encodedDecimalScalePrecisionProvider() {
+    return Stream.of(
+        Arguments.of(6, 10),
+        Arguments.of(30, 32),
+        Arguments.of(1, 3)
+    );
+  }
+
+  static Stream<Object> encodedDecimalFixedScalePrecisionProvider() {
+    return Stream.of(
+        Arguments.of(5, 6, 10),
+        Arguments.of(14, 30, 32),
+        Arguments.of(2, 1, 3)
+    );
+  }
 }
