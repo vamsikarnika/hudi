@@ -589,7 +589,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
 
   @ParameterizedTest
   @MethodSource("encodedDecimalFixedScalePrecisionProvider")
-  void testEncodedDecimalAvroSparkPostProcessorCaseHelper(int size, int scale, int precision) throws JsonProcessingException {
+  void testEncodedDecimalAvroSparkPostProcessorCase(int size, int scale, int precision) throws JsonProcessingException {
     Random rand = new Random();
     String postProcessSchemaString = String.format("{\"type\":\"record\",\"name\":\"tripUberRec\","
         + "\"fields\":[{\"name\":\"timestamp\",\"type\":\"long\",\"doc\":\"\"},{\"name\":\"_row_key\","
