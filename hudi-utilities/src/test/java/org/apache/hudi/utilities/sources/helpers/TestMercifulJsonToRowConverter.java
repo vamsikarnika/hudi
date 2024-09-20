@@ -582,6 +582,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String json = MAPPER.writeValueAsString(data);
     Schema tripSchema = new Schema.Parser().parse(TRIP_ENCODED_DECIMAL_SCHEMA.replace("6", Integer.toString(scale)).replace("10", Integer.toString(precision)));
     Row rec = CONVERTER.convertToRow(json, tripSchema);
+    validateSchemaCompatibility(Collections.singletonList(rec), tripSchema);
     BigDecimal actualField = rec.getDecimal(tripSchema.getField("decfield").pos());
     assertEquals(decfield, actualField);
   }
