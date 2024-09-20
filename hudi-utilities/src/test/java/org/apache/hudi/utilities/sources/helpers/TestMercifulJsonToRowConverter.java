@@ -575,6 +575,8 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     data.put("rider", "myrider");
     data.put("decfield", Base64.getEncoder().encodeToString(decfield.unscaledValue().toByteArray()));
     data.put("driver", "mydriver");
+    data.put("lowprecision", 12.34);
+    data.put("highprecision", 12.987654312312);
     data.put("fare", rand.nextDouble() * 100);
     data.put("_hoodie_is_deleted", false);
     String json = MAPPER.writeValueAsString(data);
@@ -611,6 +613,7 @@ class TestMercifulJsonToRowConverter extends MercifulJsonConverterTestBase {
     String json = MAPPER.writeValueAsString(data);
     Row rec = CONVERTER.convertToRow(json, postProcessSchema);
     BigDecimal actualField = rec.getDecimal(postProcessSchema.getField("decfield").pos());
+    validateSchemaCompatibility(Collections.singletonList(rec), postProcessSchema);
     assertEquals(decfield, actualField);
   }
 
