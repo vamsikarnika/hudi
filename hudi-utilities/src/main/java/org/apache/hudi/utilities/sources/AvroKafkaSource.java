@@ -142,6 +142,6 @@ public class AvroKafkaSource extends KafkaSource<JavaRDD<GenericRecord>> {
     }
     props.put(KAFKA_VALUE_DESERIALIZER_SCHEMA.key(), schemaProvider.getSourceSchema().toString());
     // assign consumer group id based on the schema, since if there's a change in the schema we ensure KafkaRDDIterator doesn't use cached Kafka Consumer
-    props.put(NATIVE_KAFKA_CONSUMER_GROUP_ID, HashID.hash(schemaProvider.getSourceSchema().toString(), HashID.Size.BITS_128));
+    props.put(NATIVE_KAFKA_CONSUMER_GROUP_ID, new String(HashID.hash(schemaProvider.getSourceSchema().toString(), HashID.Size.BITS_128)));
   }
 }
