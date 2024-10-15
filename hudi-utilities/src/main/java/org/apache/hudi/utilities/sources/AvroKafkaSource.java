@@ -31,6 +31,7 @@ import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen;
 import org.apache.hudi.utilities.streamer.DefaultStreamContext;
 import org.apache.hudi.utilities.streamer.StreamContext;
 
+import com.google.crypto.tink.subtle.Base64;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
@@ -142,6 +143,9 @@ public class AvroKafkaSource extends KafkaSource<JavaRDD<GenericRecord>> {
     }
     props.put(KAFKA_VALUE_DESERIALIZER_SCHEMA.key(), schemaProvider.getSourceSchema().toString());
     // assign consumer group id based on the schema, since if there's a change in the schema we ensure KafkaRDDIterator doesn't use cached Kafka Consumer
-    props.put(NATIVE_KAFKA_CONSUMER_GROUP_ID, new String(HashID.hash(schemaProvider.getSourceSchema().toString(), HashID.Size.BITS_128)));
+    String groupId = props.getString(NATIVE_KAFKA_CONSUMER_GROUP_ID, "");
+    String schemaHash = Base64.encode(HashID.hash(schemaProvider.getSourceSchema().toString(), HashID.Size.BITS_128));
+    String updatedConsumerGroup = groupId.isEmpty() ? schemaHash : String.format("%s_%s", groupId, schemaHash);
+    props.put(NATIVE_KAFKA_CONSUMER_GROUP_ID, updatedConsumerGroup);
   }
 }
