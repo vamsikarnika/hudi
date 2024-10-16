@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.sources;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.hash.HashID;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.deser.KafkaAvroSchemaDeserializer;
@@ -45,6 +46,8 @@ import org.apache.spark.streaming.kafka010.OffsetRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
+
 import static org.apache.hudi.common.util.ConfigUtils.DELTA_STREAMER_CONFIG_PREFIX;
 import static org.apache.hudi.common.util.ConfigUtils.STREAMER_CONFIG_PREFIX;
 import static org.apache.hudi.common.util.ConfigUtils.getStringWithAltKeys;
@@ -66,6 +69,7 @@ public class AvroKafkaSource extends KafkaSource<JavaRDD<GenericRecord>> {
   @Deprecated
   public static final String KAFKA_AVRO_VALUE_DESERIALIZER_SCHEMA =
       OLD_KAFKA_AVRO_VALUE_DESERIALIZER_PROPERTY_PREFIX + "schema";
+  private static final int GROUP_ID_MAX_BYTES_LENGTH = 255;
   private final String deserializerClassName;
 
   //other schema provider may have kafka offsets
@@ -138,14 +142,15 @@ public class AvroKafkaSource extends KafkaSource<JavaRDD<GenericRecord>> {
   }
 
   private void configureSchemaDeserializer() {
-    if (schemaProvider == null) {
+    if (schemaProvider == null || Objects.isNull(schemaProvider.getSourceSchema())) {
       throw new HoodieReadFromSourceException("SchemaProvider has to be set to use KafkaAvroSchemaDeserializer");
     }
     props.put(KAFKA_VALUE_DESERIALIZER_SCHEMA.key(), schemaProvider.getSourceSchema().toString());
     // assign consumer group id based on the schema, since if there's a change in the schema we ensure KafkaRDDIterator doesn't use cached Kafka Consumer
     String groupId = props.getString(NATIVE_KAFKA_CONSUMER_GROUP_ID, "");
     String schemaHash = Base64.encode(HashID.hash(schemaProvider.getSourceSchema().toString(), HashID.Size.BITS_128));
-    String updatedConsumerGroup = groupId.isEmpty() ? schemaHash : String.format("%s_%s", groupId, schemaHash);
+    String updatedConsumerGroup = groupId.isEmpty() ? schemaHash
+        : StringUtils.concatenateWithThreshold(String.format("%s_", groupId), schemaHash, GROUP_ID_MAX_BYTES_LENGTH);
     props.put(NATIVE_KAFKA_CONSUMER_GROUP_ID, updatedConsumerGroup);
   }
 }
