@@ -48,7 +48,8 @@ public class TestKafkaSourceUtil {
     // should throw exception when schema provider is null.
     assertThrows(HoodieReadFromSourceException.class, () -> KafkaSourceUtil.configureSchemaDeserializer(schemaProvider, props));
 
-    String avroSchemaJson = "{\"type\":\"record\",\"name\":\"Person\",\"fields\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"age\",\"type\":\"int\"},{\"name\":\"email\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"isEmployed\",\"type\":\"boolean\"}]}";
+    String avroSchemaJson =
+        "{\"type\":\"record\",\"name\":\"Person\",\"fields\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"age\",\"type\":\"int\"},{\"name\":\"email\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"isEmployed\",\"type\":\"boolean\"}]}";
     Schema schema = new Schema.Parser().parse(avroSchemaJson);
     when(schemaProvider.getSourceSchema()).thenReturn(schema);
     KafkaSourceUtil.configureSchemaDeserializer(schemaProvider, props);
