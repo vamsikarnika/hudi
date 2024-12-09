@@ -49,7 +49,9 @@ public class TestKafkaSourceUtil {
     assertThrows(HoodieReadFromSourceException.class, () -> KafkaSourceUtil.configureSchemaDeserializer(schemaProvider, props));
 
     String avroSchemaJson =
-        "{\"type\":\"record\",\"name\":\"Person\",\"fields\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"age\",\"type\":\"int\"},{\"name\":\"email\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"isEmployed\",\"type\":\"boolean\"}]}";
+        "{\"type\":\"record\",\"name\":\"Person\",\"fields\":[{\"name\":\"name\",\"type\":\"string\"},"
+            + "{\"name\":\"age\",\"type\":\"int\"},{\"name\":\"email\",\"type\":[\"null\",\"string\"],\"default\":null},"
+            + "{\"name\":\"isEmployed\",\"type\":\"boolean\"}]}";
     Schema schema = new Schema.Parser().parse(avroSchemaJson);
     when(schemaProvider.getSourceSchema()).thenReturn(schema);
     KafkaSourceUtil.configureSchemaDeserializer(schemaProvider, props);
