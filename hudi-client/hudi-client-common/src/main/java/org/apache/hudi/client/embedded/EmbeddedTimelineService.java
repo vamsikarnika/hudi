@@ -175,8 +175,7 @@ public class EmbeddedTimelineService {
 
     this.serviceConfig = timelineServiceConfBuilder.build();
 
-    server = timelineServiceCreator.create(context, hadoopConf.newCopy(), serviceConfig,
-        FSUtils.getFs(writeConfig.getBasePath(), hadoopConf.newCopy()), viewManager);
+    server = timelineServiceCreator.create(context, hadoopConf.newCopy(), serviceConfig, viewManager);
     serverPort = server.startService();
     LOG.info("Started embedded timeline server at " + hostAddr + ":" + serverPort);
   }
@@ -184,7 +183,7 @@ public class EmbeddedTimelineService {
   @FunctionalInterface
   interface TimelineServiceCreator {
     TimelineService create(HoodieEngineContext context, Configuration hadoopConf, TimelineService.Config timelineServerConf,
-                           FileSystem fileSystem, FileSystemViewManager globalFileSystemViewManager) throws IOException;
+                           FileSystemViewManager globalFileSystemViewManager) throws IOException;
   }
 
   private void setHostAddr(String embeddedTimelineServiceHostAddr) {

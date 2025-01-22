@@ -35,7 +35,6 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.timeline.service.TimelineService;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -77,7 +76,7 @@ class TestTimelineHandler extends HoodieCommonTestHarness {
         .withStorageType(FileSystemViewStorageType.MEMORY)
         .build();
     fileSystemViewManager = FileSystemViewManager.createViewManager(getEngineContext(), metadataConfig, fileSystemViewStorageConfig, commonConfig);
-    timelineHandler = new TimelineHandler(new Configuration(), new TimelineService.Config(), FileSystem.get(new Configuration()), fileSystemViewManager);
+    timelineHandler = new TimelineHandler(new Configuration(), new TimelineService.Config(), fileSystemViewManager);
   }
 
   @AfterEach
@@ -92,7 +91,7 @@ class TestTimelineHandler extends HoodieCommonTestHarness {
 
   @Test
   void initializeTimeline() throws IOException {
-    TimelineHandler timelineHandler = new TimelineHandler(new Configuration(), new TimelineService.Config(), FileSystem.get(new Configuration()), mockFileSystemViewManager);
+    TimelineHandler timelineHandler = new TimelineHandler(new Configuration(), new TimelineService.Config(), mockFileSystemViewManager);
     // Init without any view.
     SyncableFileSystemView firstView = fileSystemViewManager.getFileSystemView(basePath);
     when(mockFileSystemViewManager.doesFileSystemViewExists(basePath)).thenReturn(false);

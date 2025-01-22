@@ -41,12 +41,11 @@ class TestTimelineService {
       HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
       int originalServerPort = 8888;
       TimelineService.Config config = TimelineService.Config.builder().enableMarkerRequests(true).serverPort(originalServerPort).build();
-      FileSystem fileSystem = FileSystem.get(conf);
       FileSystemViewManager viewManager = mock(FileSystemViewManager.class);
-      timelineService = new TimelineService(engineContext, conf, config, fileSystem, viewManager);
+      timelineService = new TimelineService(engineContext, conf, config, viewManager);
       assertEquals(originalServerPort, timelineService.startService());
       // Create second service with the same configs
-      secondTimelineService = new TimelineService(engineContext, conf, config, fileSystem, viewManager);
+      secondTimelineService = new TimelineService(engineContext, conf, config, viewManager);
       assertNotEquals(originalServerPort, secondTimelineService.startService());
     } finally {
       if (timelineService != null) {

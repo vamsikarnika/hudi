@@ -20,6 +20,7 @@ package org.apache.hudi.timeline.service.handlers;
 
 import org.apache.hudi.common.conflict.detection.TimelineServerBasedDetectionStrategy;
 import org.apache.hudi.common.engine.HoodieEngineContext;
+import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.metrics.Registry;
 import org.apache.hudi.common.model.IOType;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
@@ -42,7 +43,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -103,10 +103,9 @@ public class MarkerHandler extends Handler {
   private TimelineServerBasedDetectionStrategy earlyConflictDetectionStrategy;
 
   public MarkerHandler(Configuration conf, TimelineService.Config timelineServiceConfig,
-                       HoodieEngineContext hoodieEngineContext, FileSystem fileSystem,
-                       FileSystemViewManager viewManager, Registry metricsRegistry) throws IOException {
-    super(conf, timelineServiceConfig, fileSystem, viewManager);
-    LOG.debug("MarkerHandler FileSystem: " + this.fileSystem.getScheme());
+                       HoodieEngineContext hoodieEngineContext,
+                       FileSystemViewManager viewManager, Registry metricsRegistry) {
+    super(conf, timelineServiceConfig, viewManager);
     LOG.debug("MarkerHandler batching params: batchNumThreads=" + timelineServiceConfig.markerBatchNumThreads
         + " batchIntervalMs=" + timelineServiceConfig.markerBatchIntervalMs + "ms");
     this.hoodieEngineContext = hoodieEngineContext;
@@ -228,7 +227,8 @@ public class MarkerHandler extends Handler {
                 timelineServiceConfig.asyncConflictDetectorInitialDelayMs,
                 timelineServiceConfig.asyncConflictDetectorPeriodMs,
                 markerDir, basePath, timelineServiceConfig.maxAllowableHeartbeatIntervalInMs,
-                fileSystem, this, completedCommits);
+                FSUtils.getFs(basePath, hoodieEngineContext.getHadoopConf().newCopy()),
+                this, completedCommits);
           }
         }
 
@@ -304,7 +304,7 @@ public class MarkerHandler extends Handler {
                   ? Option.of(earlyConflictDetectionStrategy) : Option.empty();
           markerDirState = new MarkerDirState(
               markerDir, timelineServiceConfig.markerBatchNumThreads,
-              strategy, fileSystem, metricsRegistry, hoodieEngineContext, parallelism);
+              strategy, FSUtils.getFs(markerDir, hoodieEngineContext.getHadoopConf().newCopy()), metricsRegistry, hoodieEngineContext, parallelism);
           markerDirStateMap.put(markerDir, markerDirState);
         } else {
           markerDirState = markerDirStateMap.get(markerDir);
