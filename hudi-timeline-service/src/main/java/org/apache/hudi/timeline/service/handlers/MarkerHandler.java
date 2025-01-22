@@ -101,6 +101,7 @@ public class MarkerHandler extends Handler {
   private boolean firstCreationRequestSeen;
   private String currentMarkerDir = null;
   private TimelineServerBasedDetectionStrategy earlyConflictDetectionStrategy;
+  private final Configuration hadoopConfig;
 
   public MarkerHandler(Configuration conf, TimelineService.Config timelineServiceConfig,
                        HoodieEngineContext hoodieEngineContext,
@@ -116,6 +117,7 @@ public class MarkerHandler extends Handler {
     this.markerCreationDispatchingRunnable =
         new MarkerCreationDispatchingRunnable(markerDirStateMap, batchingExecutorService);
     this.firstCreationRequestSeen = false;
+    this.hadoopConfig = hoodieEngineContext.getHadoopConf().newCopy();
   }
 
   /**
@@ -250,7 +252,7 @@ public class MarkerHandler extends Handler {
   }
 
   public FileSystem getFileSystem(String path) {
-    return FSUtils.getFs(path, hoodieEngineContext.getHadoopConf().newCopy());
+    return FSUtils.getFs(path, hadoopConfig);
   }
 
   private MarkerCreationFuture addMarkerCreationRequestForAsyncProcessing(
