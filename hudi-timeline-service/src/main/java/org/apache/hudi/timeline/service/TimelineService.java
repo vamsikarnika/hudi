@@ -33,7 +33,6 @@ import com.beust.jcommander.Parameter;
 import io.javalin.Javalin;
 import io.javalin.core.util.JavalinBindException;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;

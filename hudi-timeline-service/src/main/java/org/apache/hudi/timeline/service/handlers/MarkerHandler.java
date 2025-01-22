@@ -227,8 +227,7 @@ public class MarkerHandler extends Handler {
                 timelineServiceConfig.asyncConflictDetectorInitialDelayMs,
                 timelineServiceConfig.asyncConflictDetectorPeriodMs,
                 markerDir, basePath, timelineServiceConfig.maxAllowableHeartbeatIntervalInMs,
-                FSUtils.getFs(basePath, hoodieEngineContext.getHadoopConf().newCopy()),
-                this, completedCommits);
+                getFileSystem(basePath), this, completedCommits);
           }
         }
 
@@ -248,6 +247,10 @@ public class MarkerHandler extends Handler {
 
     // Step 2 create marker
     return addMarkerCreationRequestForAsyncProcessing(context, markerDir, markerName);
+  }
+
+  public FileSystem getFileSystem(String path) {
+    return FSUtils.getFs(path, hoodieEngineContext.getHadoopConf().newCopy());
   }
 
   private MarkerCreationFuture addMarkerCreationRequestForAsyncProcessing(
@@ -304,7 +307,7 @@ public class MarkerHandler extends Handler {
                   ? Option.of(earlyConflictDetectionStrategy) : Option.empty();
           markerDirState = new MarkerDirState(
               markerDir, timelineServiceConfig.markerBatchNumThreads,
-              strategy, FSUtils.getFs(markerDir, hoodieEngineContext.getHadoopConf().newCopy()), metricsRegistry, hoodieEngineContext, parallelism);
+              strategy, getFileSystem(markerDir), metricsRegistry, hoodieEngineContext, parallelism);
           markerDirStateMap.put(markerDir, markerDirState);
         } else {
           markerDirState = markerDirStateMap.get(markerDir);
