@@ -64,7 +64,7 @@ public class TimelineService {
   }
 
   public TimelineService(HoodieEngineContext context, Configuration hadoopConf, Config timelineServerConf,
-                         FileSystemViewManager globalFileSystemViewManager) throws IOException {
+                         FileSystemViewManager globalFileSystemViewManager) {
     this.conf = FSUtils.prepareHadoopConf(hadoopConf);
     this.timelineServerConf = timelineServerConf;
     this.serverPort = timelineServerConf.serverPort;
@@ -345,7 +345,7 @@ public class TimelineService {
     return realServerPort;
   }
 
-  private void createApp() throws IOException {
+  private void createApp() {
     // if app needs to be recreated, stop the existing one
     if (app != null) {
       app.stop();
