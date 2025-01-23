@@ -71,7 +71,7 @@ public class TimelineServerPerf implements Serializable {
   private final boolean useExternalTimelineServer;
   private String hostAddr;
 
-  public TimelineServerPerf(Config cfg) throws IOException {
+  public TimelineServerPerf(Config cfg) {
     this.cfg = cfg;
     useExternalTimelineServer = (cfg.serverHost != null);
     TimelineService.Config timelineServiceConf = cfg.getTimelineServerConfig();

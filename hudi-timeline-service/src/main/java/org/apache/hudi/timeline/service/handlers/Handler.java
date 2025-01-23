@@ -22,7 +22,6 @@ import org.apache.hudi.common.table.view.FileSystemViewManager;
 import org.apache.hudi.timeline.service.TimelineService;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 
 public abstract class Handler {
 
@@ -35,9 +34,5 @@ public abstract class Handler {
     this.conf = conf;
     this.timelineServiceConfig = timelineServiceConfig;
     this.viewManager = viewManager;
-  }
-
-  public FileSystem getFileSystem(String path) {
-    return null;
   }
 }

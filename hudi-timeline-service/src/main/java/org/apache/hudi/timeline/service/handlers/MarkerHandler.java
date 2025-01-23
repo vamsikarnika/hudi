@@ -251,8 +251,7 @@ public class MarkerHandler extends Handler {
     return addMarkerCreationRequestForAsyncProcessing(context, markerDir, markerName);
   }
 
-  @Override
-  public FileSystem getFileSystem(String path) {
+  private FileSystem getFileSystem(String path) {
     return FSUtils.getFs(path, hadoopConfig);
   }
 
