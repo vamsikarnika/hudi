@@ -34,7 +34,6 @@ import org.apache.hudi.common.table.view.TestHoodieTableFileSystemView;
 import org.apache.hudi.common.testutils.MockHoodieTimeline;
 import org.apache.hudi.exception.HoodieRemoteException;
 import org.apache.hudi.hadoop.fs.HadoopFSUtils;
-import org.apache.hudi.storage.HoodieStorageUtils;
 import org.apache.hudi.timeline.service.TimelineService;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -49,7 +48,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.apache.hudi.common.testutils.HoodieTestUtils.getDefaultStorageConf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,7 +72,6 @@ public class TestRemoteHoodieTableFileSystemView extends TestHoodieTableFileSyst
     try {
       server = new TimelineService(localEngineContext, HadoopFSUtils.getStorageConf(),
           TimelineService.Config.builder().serverPort(0).build(),
-          HoodieStorageUtils.getStorage(getDefaultStorageConf()),
           FileSystemViewManager.createViewManager(localEngineContext, HoodieMetadataConfig.newBuilder().build(), sConf, commonConfig));
       server.startService();
     } catch (Exception ex) {

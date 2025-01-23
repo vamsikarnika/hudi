@@ -69,7 +69,6 @@ public class TestTimelineServerBasedWriteMarkers extends TestWriteMarkersBase {
     try {
       timelineService = new TimelineService(localEngineContext, HadoopFSUtils.getStorageConf(),
           TimelineService.Config.builder().serverPort(0).enableMarkerRequests(true).build(),
-          storage,
           FileSystemViewManager.createViewManager(localEngineContext, HoodieMetadataConfig.newBuilder().build(), storageConf, HoodieCommonConfig.newBuilder().build()));
       timelineService.startService();
     } catch (Exception ex) {
