@@ -168,6 +168,11 @@ public class SparkHoodieBloomIndexHelper extends BaseHoodieBloomIndexHelper {
           .repartitionAndSortWithinPartitions(partitioner)
           .map(Tuple2::_2)
           .mapPartitions(new HoodieSparkBloomIndexCheckFunction(hoodieTable, config), true);
+    } else if (config.useBloomIndexFileGroupIdKeySortPartitioner()) {
+      keyLookupResultRDD = fileComparisonsRDD.map(fileGroupAndRecordKey -> fileGroupAndRecordKey)
+          .sortBy(fileGroupAndRecordKey -> fileGroupAndRecordKey._1
+              + "+" + fileGroupAndRecordKey._2, true, targetParallelism
+          ).mapPartitions(new HoodieSparkBloomIndexCheckFunction(hoodieTable, config), true);
     } else {
       keyLookupResultRDD = fileComparisonsRDD.sortByKey(true, targetParallelism)
           .mapPartitions(new HoodieSparkBloomIndexCheckFunction(hoodieTable, config), true);
