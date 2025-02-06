@@ -23,6 +23,7 @@ import org.apache.hudi.utilities.exception.HoodieReadFromSourceException;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 
 import org.apache.avro.Schema;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,7 +31,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.apache.hudi.utilities.config.KafkaSourceConfig.KAFKA_VALUE_DESERIALIZER_SCHEMA;
 import static org.apache.hudi.utilities.sources.helpers.KafkaSourceUtil.GROUP_ID_MAX_BYTES_LENGTH;
-import static org.apache.hudi.utilities.sources.helpers.KafkaSourceUtil.NATIVE_KAFKA_CONSUMER_GROUP_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -55,8 +55,8 @@ public class TestKafkaSourceUtil {
     Schema schema = new Schema.Parser().parse(avroSchemaJson);
     when(schemaProvider.getSourceSchema()).thenReturn(schema);
     KafkaSourceUtil.configureSchemaDeserializer(schemaProvider, props);
-    assertTrue(props.containsKey(NATIVE_KAFKA_CONSUMER_GROUP_ID));
-    assertTrue(props.getString(NATIVE_KAFKA_CONSUMER_GROUP_ID, "").length() <= GROUP_ID_MAX_BYTES_LENGTH);
+    assertTrue(props.containsKey(ConsumerConfig.GROUP_ID_CONFIG));
+    assertTrue(props.getString(ConsumerConfig.GROUP_ID_CONFIG, "").length() <= GROUP_ID_MAX_BYTES_LENGTH);
     assertEquals(props.getString(KAFKA_VALUE_DESERIALIZER_SCHEMA.key()), avroSchemaJson);
   }
 }

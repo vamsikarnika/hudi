@@ -65,7 +65,6 @@ import static org.apache.hudi.utilities.schema.KafkaOffsetPostProcessor.KAFKA_SO
 import static org.apache.hudi.utilities.schema.KafkaOffsetPostProcessor.KAFKA_SOURCE_PARTITION_COLUMN;
 import static org.apache.hudi.utilities.schema.KafkaOffsetPostProcessor.KAFKA_SOURCE_TIMESTAMP_COLUMN;
 import static org.apache.hudi.utilities.sources.helpers.KafkaSourceUtil.GROUP_ID_MAX_BYTES_LENGTH;
-import static org.apache.hudi.utilities.sources.helpers.KafkaSourceUtil.NATIVE_KAFKA_CONSUMER_GROUP_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -293,14 +292,14 @@ public class TestAvroKafkaSource extends SparkClientFunctionalTestHarness {
     SchemaProvider schemaProvider = UtilHelpers.wrapSchemaProviderWithPostProcessor(
         UtilHelpers.createSchemaProvider(FilebasedSchemaProvider.class.getName(), props, jsc()), props, jsc(), new ArrayList<>());
     AvroKafkaSource avroKafkaSource = new AvroKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
-    assertTrue(avroKafkaSource.props.containsKey(NATIVE_KAFKA_CONSUMER_GROUP_ID));
-    String groupId = avroKafkaSource.props.getString(NATIVE_KAFKA_CONSUMER_GROUP_ID, "");
+    assertTrue(avroKafkaSource.props.containsKey(ConsumerConfig.GROUP_ID_CONFIG));
+    String groupId = avroKafkaSource.props.getString(ConsumerConfig.GROUP_ID_CONFIG, "");
     assertTrue(groupId.length() <= GROUP_ID_MAX_BYTES_LENGTH);
 
     schemaFilePath = TestAvroKafkaSource.class.getClassLoader().getResource("schema/evolved-test-with-default-value.avsc").getPath();
     props.put("hoodie.deltastreamer.schemaprovider.source.schema.file", schemaFilePath);
     avroKafkaSource = new AvroKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
-    String newGroupId = avroKafkaSource.props.getString(NATIVE_KAFKA_CONSUMER_GROUP_ID, "");
+    String newGroupId = avroKafkaSource.props.getString(ConsumerConfig.GROUP_ID_CONFIG, "");
     assertNotEquals(groupId, newGroupId);
   }
 }
