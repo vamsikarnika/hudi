@@ -1033,6 +1033,16 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
       HoodieTestUtils.extractZipToDirectory("logical-repair/" + dirName + ".zip", zipOutput, getClass());
       String tableBasePath = zipOutput.toString();
 
+      HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder()
+          .setConf(storage.getConf())
+          .setBasePath(tableBasePath)
+          .build();
+
+      // validate no compaction and clustering instants present in the timeline
+      HoodieTimeline completedTimeline = metaClient.getActiveTimeline().filterCompletedInstants();
+      assertFalse(completedTimeline.getInstants().stream().anyMatch(i -> i.getAction().equals(HoodieTimeline.COMPACTION_ACTION)));
+      assertFalse(completedTimeline.getInstants().stream().anyMatch(i -> i.getAction().equals(HoodieTimeline.CLUSTERING_ACTION)));
+
       TypedProperties properties = new TypedProperties();
       String schemaPath = getClass().getClassLoader().getResource("logical-repair/schema.avsc").toURI().toString();
       properties.setProperty("hoodie.streamer.schemaprovider.source.schema.file", schemaPath);
@@ -1088,15 +1098,15 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
 
         assertDataframe(df, 12, 14);
 
+        metaClient = HoodieTableMetaClient.builder()
+            .setConf(storage.getConf())
+            .setBasePath(tableBasePath)
+            .build();
+
         if ("CLUSTER".equals(operation)) {
           // after we cluster, the raw parquet should be correct
 
           // Validate raw parquet files
-          HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder()
-              .setConf(storage.getConf())
-              .setBasePath(tableBasePath)
-              .build();
-
           HoodieTimeline completedCommitsTimeline = metaClient.getCommitsTimeline().filterCompletedInstants();
           Option<HoodieInstant> latestInstant = completedCommitsTimeline.lastInstant();
           assertTrue(latestInstant.isPresent(), "No completed commits found");
@@ -1112,11 +1122,6 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
           // after compaction some files should be ok
 
           // Validate raw parquet files
-          HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder()
-              .setConf(storage.getConf())
-              .setBasePath(tableBasePath)
-              .build();
-
           HoodieTimeline completedCommitsTimeline = metaClient.getCommitsTimeline().filterCompletedInstants();
           Option<HoodieInstant> latestInstant = completedCommitsTimeline.lastInstant();
           assertTrue(latestInstant.isPresent(), "No completed commits found");
