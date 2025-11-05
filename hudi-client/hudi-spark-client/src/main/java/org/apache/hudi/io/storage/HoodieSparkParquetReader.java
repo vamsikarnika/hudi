@@ -120,7 +120,7 @@ public class HoodieSparkParquetReader implements HoodieSparkFileReader {
   }
 
   public ClosableIterator<UnsafeRow> getUnsafeRowIterator(Schema requestedSchema) throws IOException {
-    Schema nonNullSchema = AvroSchemaUtils.resolveNullableSchema(requestedSchema);
+    Schema nonNullSchema = AvroSchemaUtils.getNonNullTypeFromUnion(requestedSchema);
     StructType structSchema = HoodieInternalRowUtils.getCachedSchema(nonNullSchema);
     Option<MessageType> messageSchema = Option.of(getAvroSchemaConverter(storage.getConf().unwrapAs(Configuration.class)).convert(nonNullSchema));
     StructType dataStructType = convertToStruct(SchemaRepair.repairLogicalTypes(getFileSchema(), messageSchema));
