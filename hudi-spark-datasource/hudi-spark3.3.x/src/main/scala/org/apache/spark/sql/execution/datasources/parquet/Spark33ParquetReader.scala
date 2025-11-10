@@ -31,11 +31,14 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.schema.SchemaRepair
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.Spark33ParquetReader.repairFooterSchema
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -57,6 +60,7 @@ class Spark33ParquetReader(enableVectorizedReader: Boolean,
                            capacity: Int,
                            returningBatch: Boolean,
                            enableRecordFilter: Boolean,
+                           enableLogicalTimestampRepair: Boolean,
                            timeZoneId: Option[String]) extends SparkParquetReaderBase(
   enableVectorizedReader = enableVectorizedReader,
   enableParquetFilterPushDown = enableParquetFilterPushDown,
@@ -70,6 +74,7 @@ class Spark33ParquetReader(enableVectorizedReader: Boolean,
   capacity = capacity,
   returningBatch = returningBatch,
   enableRecordFilter = enableRecordFilter,
+  enableLogicalTimestampRepair = enableLogicalTimestampRepair,
   timeZoneId = timeZoneId) {
 
   /**
@@ -89,7 +94,8 @@ class Spark33ParquetReader(enableVectorizedReader: Boolean,
                        partitionSchema: StructType,
                        internalSchemaOpt: org.apache.hudi.common.util.Option[InternalSchema],
                        filters: Seq[Filter],
-                       sharedConf: Configuration): Iterator[InternalRow] = {
+                       sharedConf: Configuration,
+                       tableSchemaOpt: org.apache.hudi.common.util.Option[org.apache.parquet.schema.MessageType]): Iterator[InternalRow] = {
     assert(file.partitionValues.numFields == partitionSchema.size)
 
     val filePath = new Path(new URI(file.filePath))
@@ -98,8 +104,14 @@ class Spark33ParquetReader(enableVectorizedReader: Boolean,
     val schemaEvolutionUtils = new ParquetSchemaEvolutionUtils(sharedConf, filePath, requiredSchema,
       partitionSchema, internalSchemaOpt)
 
-    lazy val footerFileMetaData =
-      ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+    lazy val originalFooter = ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
+    lazy val fileFooter = if (enableLogicalTimestampRepair) {
+      repairFooterSchema(originalFooter, tableSchemaOpt)
+    } else {
+      originalFooter
+    }
+
+    lazy val footerFileMetaData = fileFooter.getFileMetaData
     val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
       footerFileMetaData.getKeyValueMetaData.get,
       datetimeRebaseModeInRead)
@@ -192,8 +204,10 @@ class Spark33ParquetReader(enableVectorizedReader: Boolean,
       val readSupport = new HoodieParquetReadSupport(
         convertTz,
         enableVectorizedReader = false,
+        enableLogicalTimestampRepair,
         datetimeRebaseSpec,
-        int96RebaseSpec)
+        int96RebaseSpec,
+        tableSchemaOpt)
       val reader = if (pushed.isDefined && enableRecordFilter) {
         val parquetFilter = FilterCompat.get(pushed.get, null)
         new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
@@ -252,9 +266,10 @@ object Spark33ParquetReader extends SparkParquetReaderBuilder {
       sqlConf.getConfString("spark.sql.legacy.parquet.nanosAsLong", "false").toBoolean
     )
 
+    val enableLogicalTimestampRepair = hadoopConf.getBoolean("logicalTimestampField.repair.enable", true)
     // Should always be set by FileSourceScanExec while creating this.
     // Check conf before checking the option, to allow working around an issue by changing conf.
-    val returningBatch = sqlConf.parquetVectorizedReaderEnabled &&
+    val returningBatch = vectorized && sqlConf.parquetVectorizedReaderEnabled &&
       options.get(FileFormat.OPTION_RETURNING_BATCH)
         .getOrElse {
           throw new IllegalArgumentException(
@@ -279,6 +294,23 @@ object Spark33ParquetReader extends SparkParquetReaderBuilder {
       capacity = sqlConf.parquetVectorizedReaderBatchSize,
       returningBatch = returningBatch,
       enableRecordFilter = sqlConf.parquetRecordFilterEnabled,
+      enableLogicalTimestampRepair = enableLogicalTimestampRepair,
       timeZoneId = Some(sqlConf.sessionLocalTimeZone))
+  }
+
+  // Helper to repair the schema if needed
+  def repairFooterSchema(original: ParquetMetadata,
+                         tableSchemaOpt: org.apache.hudi.common.util.Option[org.apache.parquet.schema.MessageType]): ParquetMetadata = {
+    val repairedSchema = SchemaRepair.repairLogicalTypes(original.getFileMetaData.getSchema, tableSchemaOpt)
+    val oldMeta = original.getFileMetaData
+    new ParquetMetadata(
+      new FileMetaData(
+        repairedSchema,
+        oldMeta.getKeyValueMetaData,
+        oldMeta.getCreatedBy,
+        oldMeta.getFileDecryptor
+      ),
+      original.getBlocks
+    )
   }
 }

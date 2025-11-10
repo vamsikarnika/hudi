@@ -508,6 +508,7 @@ public class TestSavepointRestoreMergeOnRead extends HoodieClientTestBase {
     }
   }
 
+  // TODO(yihua): investigate test failure
   @Test
   void rollbackWithAsyncServices_commitCompletesDuringCompaction() {
     HoodieWriteConfig hoodieWriteConfig = getHoodieWriteConfigWithCompactionAndConcurrencyControl(HoodieTableVersion.EIGHT);
