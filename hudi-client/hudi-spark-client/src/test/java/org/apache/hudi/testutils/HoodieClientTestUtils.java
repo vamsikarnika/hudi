@@ -97,6 +97,32 @@ public class HoodieClientTestUtils {
         .set("spark.sql.shuffle.partitions", "4")
         .set("spark.default.parallelism", "4");
 
+    // Gluten/Velox sweep: gate behind -Dhudi.test.gluten.enabled=true so the harness can be
+    // flipped back to vanilla Spark without code changes.
+    //
+    // Uses the consistent (non-rebranded) gluten-velox-bundle: upstream org.apache.gluten.*
+    // classes and spark.gluten.* configs. Shuffle manager stays in org.apache.spark.
+    //
+    // Fallback handling: this Gluten version has NO throw-on-fallback config (the old
+    // spark.gluten.sql.columnar.fallback.enabled was removed). Instead we let Gluten offload
+    // what it can and keep the GlutenFallbackReporter on -- it logs each operator that cannot be
+    // offloaded together with the concrete reason (e.g. unsupported type/expression), which is
+    // the signal the data-type sweep parses. We deliberately do NOT set the fallback thresholds:
+    // forcing whole-query fallback (threshold=1) masks the per-operator reasons behind a generic
+    // "Fallback policy is taking effect" message. See sweep notes.
+    if (Boolean.parseBoolean(System.getProperty("hudi.test.gluten.enabled", "false"))) {
+      sparkConf
+          .set("spark.plugins", "org.apache.gluten.GlutenPlugin")
+          .set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.ColumnarShuffleManager")
+          .set("spark.memory.offHeap.enabled", "true")
+          .set("spark.memory.offHeap.size", "4g")
+          .set("spark.gluten.enabled", "true")
+          .set("spark.gluten.sql.columnar.libname", "gluten")
+          .set("spark.gluten.sql.columnar.fallbackReporter", "true")
+          .set("spark.gluten.sql.validation.printStackOnFailure", "true")
+          .set("spark.gluten.sql.debug", "true");
+    }
+
     // NOTE: This utility is used in modules where this class might not be present, therefore
     //       to avoid littering output w/ [[ClassNotFoundException]]s we will skip adding it
     //       in case this utility is used in the module not providing it
