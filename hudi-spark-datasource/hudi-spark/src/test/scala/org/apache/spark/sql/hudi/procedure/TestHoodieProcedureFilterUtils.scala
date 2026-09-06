@@ -37,6 +37,9 @@ class TestHoodieProcedureFilterUtils extends HoodieSparkProcedureTestBase {
   private def keep(rows: Seq[Row], expr: String, schema: StructType): Seq[Row] =
     HoodieProcedureFilterUtils.evaluateFilter(rows, expr, schema, spark)
 
+  private def validate(expr: String, schema: StructType = scalarSchema): Either[String, Unit] =
+    HoodieProcedureFilterUtils.validateFilterExpression(expr, schema, spark)
+
   // A rich scalar schema reused across the function tests.
   private val scalarSchema = schemaOf(
     "id" -> IntegerType,
@@ -120,22 +123,12 @@ class TestHoodieProcedureFilterUtils extends HoodieSparkProcedureTestBase {
     assertResult(Seq.empty)(keep(scalarRows, "price > 15.0", scalarSchema))
   }
 
-  test("evaluateFilter silently drops rows for functions outside the resolution table") {
-    // Known limitation: a function missing from the resolution table falls through as an
-    // UnresolvedFunction. validateFilterExpression only checks column references, so nothing
-    // rejects it; instead evaluation fails per row and the row is dropped, which looks like an
-    // empty result rather than an error. Pinned here so a fix flips these; see #19638.
+  test("evaluateFilter silently drops rows for expressions it cannot resolve") {
     assertResult(Seq.empty)(keep(scalarRows, "concat(name, 'x') = 'a1x'", scalarSchema))
     assertResult(Seq.empty)(keep(scalarRows, "instr(name, 'a') = 1", scalarSchema))
-    assertResult(Right(()))(
-      HoodieProcedureFilterUtils.validateFilterExpression("concat(name, 'x') = 'a1x'", scalarSchema, spark))
-    // if() is parsed as a function call and hits the same gap, while the equivalent CASE WHEN is
-    // lowered by the parser without an UnresolvedFunction and evaluates fine.
     assertResult(Seq.empty)(keep(scalarRows, "if(name = 'a1', true, false)", scalarSchema))
     assertResult(Seq(scalarRows.head))(
       keep(scalarRows, "case when name = 'a1' then true else false end", scalarSchema))
-    // Control: a function that is in the resolution table resolves and matches.
-    assertResult(Seq(scalarRows.head))(keep(scalarRows, "upper(name) = 'A1'", scalarSchema))
   }
 
   test("evaluateFilter handles AND / OR / NOT / IN / BETWEEN") {
@@ -291,20 +284,37 @@ class TestHoodieProcedureFilterUtils extends HoodieSparkProcedureTestBase {
 
   test("validateFilterExpression accepts valid references and rejects unknown ones") {
     assertResult(Right(()))(
-      HoodieProcedureFilterUtils.validateFilterExpression("id > 1 AND name = 'a1'", scalarSchema, spark))
+      validate("id > 1 AND name = 'a1'"))
     assertResult(Right(()))(
-      HoodieProcedureFilterUtils.validateFilterExpression(null, scalarSchema, spark))
+      validate("ts >= 0 AND ts BETWEEN 0 AND 999999"))
     assertResult(Right(()))(
-      HoodieProcedureFilterUtils.validateFilterExpression("   ", scalarSchema, spark))
+      validate(null))
+    assertResult(Right(()))(
+      validate("   "))
 
-    val invalidCol = HoodieProcedureFilterUtils.validateFilterExpression("missing_col > 1", scalarSchema, spark)
+    val invalidCol = validate("missing_col > 1")
     assert(invalidCol.isLeft)
     val invalidColMsg = invalidCol.fold(identity, _ => "")
     assert(invalidColMsg.contains("Invalid column references"))
     assert(invalidColMsg.contains("missing_col"))
 
-    val parseError = HoodieProcedureFilterUtils.validateFilterExpression("id >< 1", scalarSchema, spark)
+    val parseError = validate("id >< 1")
     assert(parseError.isLeft)
     assert(parseError.fold(identity, _ => "").contains("Invalid filter expression"))
+  }
+
+  test("validateFilterExpression rejects expressions the evaluator cannot resolve") {
+    val unknown = validate("concat(name, 'x') = 'a1x' OR instr(name, 'a') = 1")
+    assert(unknown.left.exists(_.contains("Unsupported functions: concat, instr")))
+
+    assert(validate("if(name = 'a1', true, false)").isLeft)
+    assert(validate("substring(name, 2)").isLeft)
+    assert(validate("id = 1 OR concat(name, 'x') = 'a1x'").isLeft)
+    assert(validate("hour(t) = 12").isLeft)
+    assert(validate("date_format(t, 'yyyy') = '2024'").isLeft)
+    assert(validate("any_value(id) = 1").isLeft)
+    assert(validate("id = (select 1)").isLeft)
+
+    assertResult(Right(()))(validate("upper(name) = 'A1'"))
   }
 }

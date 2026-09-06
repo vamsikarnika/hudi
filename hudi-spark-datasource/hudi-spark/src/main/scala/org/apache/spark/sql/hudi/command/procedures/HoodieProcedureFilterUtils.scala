@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hudi.command.procedures
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Unevaluable}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
+
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
@@ -70,13 +72,9 @@ object HoodieProcedureFilterUtils {
     }
   }
 
-  private def evaluateExpressionOnRow(expression: Expression, row: Row, schema: StructType): Boolean = {
-
-    val internalRow = convertRowToInternalRow(row, schema)
-
-    Try {
-      // First pass: bind attributes
-      val attributeBound = expression.transform {
+  private def bindAndResolveExpression(expression: Expression, schema: StructType): Expression = {
+    // First pass: bind attributes
+    val attributeBound = expression.transform {
         case attr: org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute =>
           try {
             val fieldIndex = schema.fieldIndex(attr.name)
@@ -87,10 +85,10 @@ object HoodieProcedureFilterUtils {
           }
       }
 
-      // Second pass: resolve functions
-      val functionResolved = attributeBound.transform {
+    // Second pass: resolve functions
+    val functionResolved = attributeBound.transform {
         case unresolvedFunc: org.apache.spark.sql.catalyst.analysis.UnresolvedFunction =>
-          unresolvedFunc.nameParts.head.toLowerCase match {
+          unresolvedFunc.nameParts.head.toLowerCase(Locale.ROOT) match {
             case "upper" =>
               if (unresolvedFunc.arguments.length == 1) {
                 org.apache.spark.sql.catalyst.expressions.Upper(unresolvedFunc.arguments.head)
@@ -352,21 +350,29 @@ object HoodieProcedureFilterUtils {
               }
             case _ => unresolvedFunc
           }
-      }
+    }
 
-      // Third pass: handle type coercion for numeric comparisons
-      val boundExpr = functionResolved.transformUp {
-        case eq: org.apache.spark.sql.catalyst.expressions.EqualTo =>
-          applyTypeCoercion(eq.left, eq.right, org.apache.spark.sql.catalyst.expressions.EqualTo.apply, eq)
-        case gt: org.apache.spark.sql.catalyst.expressions.GreaterThan =>
-          applyTypeCoercion(gt.left, gt.right, org.apache.spark.sql.catalyst.expressions.GreaterThan.apply, gt)
-        case gte: org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual =>
-          applyTypeCoercion(gte.left, gte.right, org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual.apply, gte)
-        case lt: org.apache.spark.sql.catalyst.expressions.LessThan =>
-          applyTypeCoercion(lt.left, lt.right, org.apache.spark.sql.catalyst.expressions.LessThan.apply, lt)
-        case lte: org.apache.spark.sql.catalyst.expressions.LessThanOrEqual =>
-          applyTypeCoercion(lte.left, lte.right, org.apache.spark.sql.catalyst.expressions.LessThanOrEqual.apply, lte)
-      }
+    // Third pass: handle type coercion for numeric comparisons
+    functionResolved.transformUp {
+      case eq: org.apache.spark.sql.catalyst.expressions.EqualTo =>
+        applyTypeCoercion(eq.left, eq.right, org.apache.spark.sql.catalyst.expressions.EqualTo.apply, eq)
+      case gt: org.apache.spark.sql.catalyst.expressions.GreaterThan =>
+        applyTypeCoercion(gt.left, gt.right, org.apache.spark.sql.catalyst.expressions.GreaterThan.apply, gt)
+      case gte: org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual =>
+        applyTypeCoercion(gte.left, gte.right, org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual.apply, gte)
+      case lt: org.apache.spark.sql.catalyst.expressions.LessThan =>
+        applyTypeCoercion(lt.left, lt.right, org.apache.spark.sql.catalyst.expressions.LessThan.apply, lt)
+      case lte: org.apache.spark.sql.catalyst.expressions.LessThanOrEqual =>
+        applyTypeCoercion(lte.left, lte.right, org.apache.spark.sql.catalyst.expressions.LessThanOrEqual.apply, lte)
+    }
+  }
+
+  private def evaluateExpressionOnRow(expression: Expression, row: Row, schema: StructType): Boolean = {
+
+    val internalRow = convertRowToInternalRow(row, schema)
+
+    Try {
+      val boundExpr = bindAndResolveExpression(expression, schema)
       val result = boundExpr.eval(internalRow)
 
       result match {
@@ -468,9 +474,22 @@ object HoodieProcedureFilterUtils {
         val columnNames = schema.fieldNames.toSet
         val referencedColumns = extractColumnReferences(parsedExpr)
         val invalidColumns = referencedColumns -- columnNames
+        val resolvedExpr = bindAndResolveExpression(parsedExpr, schema)
+        val unsupportedFunctions = extractFunctionReferences(resolvedExpr)
+        val unsupportedExpressions = resolvedExpr.collect {
+          case expression: Unevaluable
+            if !expression.isInstanceOf[UnresolvedAttribute]
+              && !expression.isInstanceOf[UnresolvedFunction] => expression.prettyName
+        }.toSet
 
         if (invalidColumns.nonEmpty) {
           Left(s"Invalid column references: ${invalidColumns.mkString(", ")}. Available columns: ${columnNames.mkString(", ")}")
+        } else if (unsupportedFunctions.nonEmpty) {
+          Left(s"Unsupported functions: ${unsupportedFunctions.toSeq.sorted.mkString(", ")}")
+        } else if (!resolvedExpr.resolved || unsupportedExpressions.nonEmpty) {
+          val names = unsupportedExpressions.toSeq.sorted
+          val detail = if (names.nonEmpty) s": ${names.mkString(", ")}" else ""
+          Left(s"Unsupported filter expression$detail")
         } else {
           Right(())
         }
@@ -479,6 +498,12 @@ object HoodieProcedureFilterUtils {
         case Failure(exception) => Left(s"Invalid filter expression: ${exception.getMessage}")
       }
     }
+  }
+
+  private def extractFunctionReferences(expression: Expression): Set[String] = expression match {
+    case unresolved: UnresolvedFunction =>
+      Set(unresolved.nameParts.mkString(".")) ++ unresolved.children.flatMap(extractFunctionReferences)
+    case _ => expression.children.flatMap(extractFunctionReferences).toSet
   }
 
   private def extractColumnReferences(expression: Expression): Set[String] = {
@@ -505,4 +530,3 @@ object HoodieProcedureFilterUtils {
     }
   }
 }
-
